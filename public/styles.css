@@ -93,6 +93,13 @@ h2 {
   margin-bottom: 24px;
 }
 
+.hero-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .status-chip {
   white-space: nowrap;
   padding: 12px 16px;
@@ -154,6 +161,7 @@ textarea:focus {
   min-height: 520px;
   resize: vertical;
   line-height: 1.6;
+  margin-top: 18px;
 }
 
 .primary-button,
@@ -170,6 +178,10 @@ textarea:focus {
   width: 100%;
   background: var(--primary);
   color: #fff;
+}
+
+.inline-button {
+  width: auto;
 }
 
 .primary-button:hover,
@@ -193,6 +205,165 @@ textarea:focus {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.billing-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.1fr) 1.4fr;
+  gap: 18px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(92, 67, 44, 0.1);
+}
+
+.billing-panel h3,
+.lock-card h3 {
+  font-family: "Fraunces", serif;
+  font-size: 1.8rem;
+  margin: 4px 0 8px;
+}
+
+.billing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 14px;
+}
+
+.billing-grid div,
+.preview-page,
+.lock-card,
+.editor-lock-notice {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(92, 67, 44, 0.1);
+  border-radius: 18px;
+}
+
+.billing-grid div {
+  padding: 14px 16px;
+}
+
+.mini-label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.preview-scroll {
+  max-height: 680px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.preview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.preview-page {
+  min-height: 420px;
+  padding: 28px;
+  box-shadow: 0 12px 30px rgba(96, 59, 25, 0.08);
+}
+
+.preview-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.preview-page h1,
+.preview-page h2,
+.preview-page h3,
+.preview-page p {
+  margin-top: 0;
+}
+
+.preview-page h1 {
+  font-size: 2rem;
+  margin-bottom: 16px;
+}
+
+.preview-page h2 {
+  font-size: 1.35rem;
+  margin-bottom: 10px;
+}
+
+.preview-page h3 {
+  font-size: 1.02rem;
+  margin-bottom: 8px;
+}
+
+.preview-page p {
+  line-height: 1.7;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.preview-page.locked-page {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 244, 0.72), rgba(239, 225, 206, 0.96)),
+    repeating-linear-gradient(
+      -35deg,
+      rgba(178, 76, 47, 0.08) 0,
+      rgba(178, 76, 47, 0.08) 18px,
+      rgba(255, 255, 255, 0.55) 18px,
+      rgba(255, 255, 255, 0.55) 36px
+    );
+}
+
+.locked-page .lock-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 24px;
+  backdrop-filter: blur(2px);
+}
+
+.lock-card {
+  margin-top: 18px;
+  padding: 22px;
+}
+
+.lock-button {
+  margin-top: 10px;
+}
+
+.sticky-unlock-bar {
+  position: sticky;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(47, 36, 26, 0.94);
+  color: #fffaf2;
+  box-shadow: var(--shadow);
+}
+
+.sticky-unlock-bar .muted {
+  color: rgba(255, 250, 242, 0.74);
+  margin: 4px 0 0;
+}
+
+.editor-lock-notice {
+  padding: 16px 18px;
+  margin-top: 18px;
+  color: var(--muted);
 }
 
 .project-list {
@@ -238,6 +409,10 @@ textarea:focus {
   box-shadow: var(--shadow);
 }
 
+[hidden] {
+  display: none !important;
+}
+
 @media (max-width: 1100px) {
   .page-shell,
   .workspace {
@@ -253,6 +428,10 @@ textarea:focus {
   .editor-panel {
     min-height: auto;
   }
+
+  .billing-panel {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
@@ -267,6 +446,15 @@ textarea:focus {
   }
 
   .hero-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .billing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sticky-unlock-bar {
     flex-direction: column;
     align-items: flex-start;
   }

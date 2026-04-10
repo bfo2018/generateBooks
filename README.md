@@ -18,6 +18,9 @@ Lean full-stack web app for generating structured, editable book drafts and expo
 - Demo-safe in-memory storage fallback for local sandboxed runs
 - Download as `.docx` or `.pdf`
 - Configurable AI provider settings for DeepSeek or similar OpenAI-compatible APIs
+- 3-page locked preview before full access
+- Token-based pricing with configurable platform fee
+- Razorpay payment gateway support with configurable key and secret
 
 ## Run locally
 
@@ -42,6 +45,15 @@ cp .env.example .env
   - `AI_API_URL`
   - `AI_API_KEY`
   - `AI_MODEL`
+- Configure payment and pricing:
+  - `PAYMENT_MODE=demo` for local testing or `PAYMENT_MODE=razorpay` for live checkout
+  - `RAZORPAY_KEY_ID`
+  - `RAZORPAY_KEY_SECRET`
+  - `PLATFORM_FEE_INR`
+  - `INPUT_COST_PER_1K_TOKENS_INR`
+  - `OUTPUT_COST_PER_1K_TOKENS_INR`
+  - `PREVIEW_PAGE_LIMIT`
+  - `WORDS_PER_PREVIEW_PAGE`
 
 4. Start the server:
 
@@ -54,5 +66,7 @@ npm run dev
 ## Notes
 
 - The frontend never sees your API key.
+- Razorpay checkout only needs the public key on the client; signature verification stays on the server with `RAZORPAY_KEY_SECRET`.
 - The AI integration is intentionally configurable because provider availability and endpoints can change.
 - `mock` mode generates a structured sample draft so the app remains usable before API setup.
+- Pricing is calculated from AI token usage when the provider returns usage stats, or estimated from prompt/output length as a fallback.

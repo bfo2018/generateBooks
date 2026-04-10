@@ -2,6 +2,7 @@ const https = require("https");
 const { URL } = require("url");
 
 const { buildBookPrompt } = require("../utils/promptBuilder");
+const { estimateTokenCount } = require("../utils/pricing");
 
 function requestJson(urlString, options, body) {
   const url = new URL(urlString);
@@ -125,11 +126,20 @@ This editable draft gives you a complete starting point that can be refined, exp
 
 async function generateWithConfiguredProvider(input) {
   const provider = (process.env.AI_PROVIDER || "mock").toLowerCase();
+  const prompt = buildBookPrompt(input);
 
   if (provider === "mock") {
+    const content = buildMockBook(input);
+
     return {
       provider,
-      content: buildMockBook(input),
+      content,
+      usage: {
+        promptTokens: estimateTokenCount(prompt),
+        completionTokens: estimateTokenCount(content),
+        totalTokens: estimateTokenCount(prompt) + estimateTokenCount(content),
+        source: "estimated",
+      },
     };
   }
 
@@ -148,7 +158,7 @@ async function generateWithConfiguredProvider(input) {
     messages: [
       {
         role: "user",
-        content: buildBookPrompt(input),
+        content: prompt,
       },
     ],
     temperature: 0.7,
@@ -176,6 +186,15 @@ async function generateWithConfiguredProvider(input) {
   return {
     provider,
     content,
+    usage: {
+      promptTokens: Number(data?.usage?.prompt_tokens) || estimateTokenCount(prompt),
+      completionTokens:
+        Number(data?.usage?.completion_tokens) || estimateTokenCount(content),
+      totalTokens:
+        Number(data?.usage?.total_tokens) ||
+        estimateTokenCount(prompt) + estimateTokenCount(content),
+      source: data?.usage ? "provider" : "estimated",
+    },
   };
 }
 

@@ -17,8 +17,10 @@ app.use(express.static(path.join(__dirname, "public")));
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
+    app: "ai-book-generator",
     provider: process.env.AI_PROVIDER || "mock",
     storage: process.env.STORAGE_MODE || "mongo",
+    paymentMode: process.env.PAYMENT_MODE || "demo",
   });
 });
 

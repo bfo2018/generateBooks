@@ -41,7 +41,10 @@
             <p class="eyebrow">Structured Content Generator</p>
             <h2>Build editable book drafts with a configurable AI backend</h2>
           </div>
-          <div class="status-chip" id="providerBadge">Provider: loading...</div>
+          <div class="hero-status">
+            <div class="status-chip" id="providerBadge">Provider: loading...</div>
+            <div class="status-chip" id="paymentBadge">Payments: loading...</div>
+          </div>
         </section>
 
         <section class="workspace">
@@ -97,6 +100,9 @@
                 <button id="saveButton" class="ghost-button" type="button" disabled>
                   Save
                 </button>
+                <button id="unlockButton" class="primary-button inline-button" type="button" disabled>
+                  Pay & Unlock
+                </button>
                 <button id="downloadDocx" class="ghost-button" type="button" disabled>
                   DOCX
                 </button>
@@ -106,6 +112,64 @@
               </div>
             </div>
 
+            <section class="billing-panel">
+              <div>
+                <p class="mini-label">Unlock Price</p>
+                <h3 id="pricingTotal">Rs 0.00</h3>
+                <p id="pricingHint" class="muted">
+                  Generate a draft to calculate token-based pricing.
+                </p>
+              </div>
+              <div class="billing-grid">
+                <div>
+                  <p class="mini-label">Tokens</p>
+                  <strong id="tokenUsage">0</strong>
+                </div>
+                <div>
+                  <p class="mini-label">Estimated Pages</p>
+                  <strong id="pageEstimate">0</strong>
+                </div>
+                <div>
+                  <p class="mini-label">Preview Limit</p>
+                  <strong id="previewLimit">3 pages</strong>
+                </div>
+                <div>
+                  <p class="mini-label">Access</p>
+                  <strong id="accessState">Locked</strong>
+                </div>
+              </div>
+            </section>
+
+            <div id="previewScroll" class="preview-scroll">
+              <div id="previewContainer" class="preview-container"></div>
+            </div>
+
+            <div id="lockCard" class="lock-card" hidden>
+              <p class="mini-label">Preview Limit Reached</p>
+              <h3>Unlock the full AI book before download</h3>
+              <p id="lockMessage" class="muted">
+                Only the first 3 pages are visible in preview mode.
+              </p>
+              <button id="lockAction" class="primary-button lock-button" type="button">
+                Pay & Unlock
+              </button>
+            </div>
+
+            <div id="stickyUnlockBar" class="sticky-unlock-bar" hidden>
+              <div>
+                <strong id="stickyUnlockLabel">Unlock full book</strong>
+                <p id="stickyUnlockHint" class="muted">
+                  Pay to enable full preview and downloads.
+                </p>
+              </div>
+              <button id="stickyUnlockButton" class="primary-button inline-button" type="button">
+                Unlock Now
+              </button>
+            </div>
+
+            <div id="editorLockNotice" class="editor-lock-notice">
+              Full editor unlocks after payment so readers only see the 3-page preview.
+            </div>
             <textarea
               id="contentEditor"
               class="content-editor"
