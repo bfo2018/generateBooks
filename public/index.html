@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BookForge AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <aside class="sidebar">
+        <div>
+          <p class="eyebrow">AI Book Studio</p>
+          <h1>BookForge</h1>
+          <p class="muted">
+            Generate a syllabus, research draft, or textbook outline and refine
+            it before export.
+          </p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Saved Projects</h2>
+            <button id="refreshProjects" class="ghost-button" type="button">
+              Refresh
+            </button>
+          </div>
+          <div id="projectList" class="project-list"></div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <section class="hero-card">
+          <div>
+            <p class="eyebrow">Structured Content Generator</p>
+            <h2>Build editable book drafts with a configurable AI backend</h2>
+          </div>
+          <div class="status-chip" id="providerBadge">Provider: loading...</div>
+        </section>
+
+        <section class="workspace">
+          <form id="generatorForm" class="panel form-panel">
+            <div class="panel-header">
+              <h2>New Project</h2>
+            </div>
+
+            <label>
+              Topic
+              <input
+                id="topic"
+                name="topic"
+                type="text"
+                placeholder="Example: Machine Learning for Agriculture"
+                required
+              />
+            </label>
+
+            <label>
+              Description
+              <textarea
+                id="description"
+                name="description"
+                rows="5"
+                placeholder="Describe the audience, coverage, tone, or goals."
+              ></textarea>
+            </label>
+
+            <label>
+              Book Type
+              <select id="bookType" name="bookType" required>
+                <option value="syllabus">Syllabus</option>
+                <option value="research">Research</option>
+                <option value="textbook" selected>Textbook</option>
+              </select>
+            </label>
+
+            <button id="generateButton" class="primary-button" type="submit">
+              Generate Book Draft
+            </button>
+          </form>
+
+          <section class="panel editor-panel">
+            <div class="panel-header">
+              <div>
+                <h2 id="editorTitle">Generated Content</h2>
+                <p id="editorMeta" class="muted">
+                  Select or generate a project to start editing.
+                </p>
+              </div>
+              <div class="action-row">
+                <button id="saveButton" class="ghost-button" type="button" disabled>
+                  Save
+                </button>
+                <button id="downloadDocx" class="ghost-button" type="button" disabled>
+                  DOCX
+                </button>
+                <button id="downloadPdf" class="ghost-button" type="button" disabled>
+                  PDF
+                </button>
+              </div>
+            </div>
+
+            <textarea
+              id="contentEditor"
+              class="content-editor"
+              placeholder="Generated content appears here..."
+            ></textarea>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="/app.js"></script>
+  </body>
+  </html>

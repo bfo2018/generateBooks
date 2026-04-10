@@ -1,0 +1,273 @@
+:root {
+  --bg: #f6efe4;
+  --bg-accent: #efe1ce;
+  --surface: rgba(255, 250, 244, 0.88);
+  --surface-strong: #fffaf2;
+  --border: rgba(92, 67, 44, 0.12);
+  --text: #2f241a;
+  --muted: #6e5a49;
+  --primary: #b24c2f;
+  --primary-dark: #8e3921;
+  --shadow: 0 20px 45px rgba(96, 59, 25, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Manrope", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.6), transparent 30%),
+    linear-gradient(135deg, var(--bg) 0%, var(--bg-accent) 100%);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.page-shell {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  padding: 28px;
+  border-right: 1px solid var(--border);
+  background: rgba(248, 240, 229, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.main-content {
+  padding: 28px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+h1,
+h2 {
+  font-family: "Fraunces", serif;
+  margin: 0;
+}
+
+h1 {
+  font-size: 2.5rem;
+}
+
+h2 {
+  font-size: 1.7rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.hero-card,
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+
+.hero-card {
+  padding: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.status-chip {
+  white-space: nowrap;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: rgba(178, 76, 47, 0.12);
+  color: var(--primary-dark);
+  font-weight: 700;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 24px;
+}
+
+.panel {
+  padding: 22px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.form-panel,
+.editor-panel {
+  min-height: 640px;
+}
+
+form label {
+  display: block;
+  margin-bottom: 18px;
+  font-weight: 600;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid rgba(92, 67, 44, 0.18);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid rgba(178, 76, 47, 0.22);
+  border-color: rgba(178, 76, 47, 0.35);
+}
+
+.content-editor {
+  min-height: 520px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.primary-button,
+.ghost-button {
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 140ms ease, opacity 140ms ease, background 140ms ease;
+}
+
+.primary-button {
+  width: 100%;
+  background: var(--primary);
+  color: #fff;
+}
+
+.primary-button:hover,
+.ghost-button:hover {
+  transform: translateY(-1px);
+}
+
+.primary-button:disabled,
+.ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.ghost-button {
+  background: rgba(178, 76, 47, 0.1);
+  color: var(--primary-dark);
+}
+
+.action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.project-card {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(92, 67, 44, 0.12);
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease;
+}
+
+.project-card:hover,
+.project-card.active {
+  transform: translateY(-1px);
+  border-color: rgba(178, 76, 47, 0.4);
+}
+
+.project-card h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.project-card p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  background: #2f241a;
+  color: #fffaf2;
+  padding: 14px 18px;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+@media (max-width: 1100px) {
+  .page-shell,
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .form-panel,
+  .editor-panel {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .sidebar,
+  .main-content {
+    padding: 18px;
+  }
+
+  .hero-card,
+  .panel {
+    border-radius: 18px;
+  }
+
+  .hero-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
