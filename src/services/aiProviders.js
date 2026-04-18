@@ -26,7 +26,9 @@ function requestJson(urlString, options, body) {
         res.on("end", () => {
           if (res.statusCode < 200 || res.statusCode >= 300) {
             return reject(
-              new Error(`AI provider error ${res.statusCode}: ${raw}`)
+              new Error(
+                `AI provider error ${res.statusCode} from ${url.origin}${url.pathname}: ${raw}`
+              )
             );
           }
 
@@ -43,6 +45,39 @@ function requestJson(urlString, options, body) {
     req.write(body);
     req.end();
   });
+}
+
+function resolveApiUrl(provider, apiUrl) {
+  if (!apiUrl) {
+    return apiUrl;
+  }
+
+  try {
+    const url = new URL(apiUrl);
+    const pathname = url.pathname.replace(/\/+$/, "");
+
+    if (pathname.endsWith("/chat/completions")) {
+      return url.toString();
+    }
+
+    if (provider === "deepseek") {
+      const normalizedPathname = pathname.replace(/\/chat\/completion$/, "/chat/completions");
+
+      if (!normalizedPathname || normalizedPathname === "/") {
+        url.pathname = "/chat/completions";
+      } else if (normalizedPathname === "/v1") {
+        url.pathname = "/v1/chat/completions";
+      } else if (!normalizedPathname.endsWith("/chat/completions")) {
+        url.pathname = `${normalizedPathname}/chat/completions`.replace(/\/+/g, "/");
+      } else {
+        url.pathname = normalizedPathname;
+      }
+    }
+
+    return url.toString();
+  } catch (_error) {
+    return apiUrl;
+  }
 }
 
 function buildMockBook({ topic, description, bookType }) {
@@ -144,7 +179,7 @@ async function generateWithConfiguredProvider(input) {
   }
 
   const apiKey = process.env.AI_API_KEY;
-  const apiUrl = process.env.AI_API_URL;
+  const apiUrl = resolveApiUrl(provider, process.env.AI_API_URL);
   const model = process.env.AI_MODEL;
 
   if (!apiKey || !apiUrl || !model) {
