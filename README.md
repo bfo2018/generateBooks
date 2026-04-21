@@ -1,6 +1,6 @@
 # BookForge AI
 
-Lean full-stack web app for generating structured, editable book drafts and exporting them as DOCX or PDF.
+Lean full-stack web app for generating structured, editable books, research papers, and topic notes with user accounts and export support.
 
 ## Stack
 
@@ -11,7 +11,9 @@ Lean full-stack web app for generating structured, editable book drafts and expo
 
 ## Features
 
-- Topic, description, and book type input
+- Registration, login, logout, and editable customer profile
+- Customer-owned document history with per-user project lists
+- Topic, description, document type, language, paper size, and image options
 - AI generation route kept on the server
 - Editable content workspace
 - MongoDB-backed project persistence
@@ -19,8 +21,9 @@ Lean full-stack web app for generating structured, editable book drafts and expo
 - Download as `.docx` or `.pdf`
 - Configurable AI provider settings for DeepSeek or similar OpenAI-compatible APIs
 - 3-page locked preview before full access
-- Token-based pricing with configurable platform fee
+- Token-based pricing with 10-day free trial, configurable platform fee, and color-image surcharge
 - Razorpay payment gateway support with configurable key and secret
+- Full-screen generation loader for long-running generation requests
 
 ## Run locally
 
@@ -50,6 +53,8 @@ cp .env.example .env
   - `RAZORPAY_KEY_ID`
   - `RAZORPAY_KEY_SECRET`
   - `PLATFORM_FEE_INR`
+  - `FREE_TRIAL_DAYS`
+  - `COLOR_IMAGE_CHARGE_INR`
   - `INPUT_COST_PER_1K_TOKENS_INR`
   - `OUTPUT_COST_PER_1K_TOKENS_INR`
   - `PREVIEW_PAGE_LIMIT`
@@ -70,3 +75,5 @@ npm run dev
 - The AI integration is intentionally configurable because provider availability and endpoints can change.
 - `mock` mode generates a structured sample draft so the app remains usable before API setup.
 - Pricing is calculated from AI token usage when the provider returns usage stats, or estimated from prompt/output length as a fallback.
+- Platform fee is `Rs 0` during a user's first `FREE_TRIAL_DAYS`, then switches to the configured fee.
+- Color file generation with image/figure suggestions adds the configured surcharge.

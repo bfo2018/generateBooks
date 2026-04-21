@@ -80,12 +80,199 @@ function resolveApiUrl(provider, apiUrl) {
   }
 }
 
-function buildMockBook({ topic, description, bookType }) {
+function buildMockBook({ topic, description, documentType, language, includeImages, colorMode }) {
+  const isHindi = language === "hindi";
   const descriptionLine = description
-    ? `This project is based on: ${description}`
-    : "This project was generated without an extra description.";
+    ? isHindi
+      ? `यह प्रोजेक्ट इस विवरण पर आधारित है: ${description}`
+      : `This project is based on: ${description}`
+    : isHindi
+      ? "यह प्रोजेक्ट बिना अतिरिक्त विवरण के तैयार किया गया है।"
+      : "This project was generated without an extra description.";
 
-  return `# ${topic}: Generated ${bookType}
+  const imageBlock = includeImages
+    ? isHindi
+      ? `## चित्र सुझाव\n### चित्र 1\n${topic} के लिए एक ${colorMode === "color" ? "रंगीन" : "सरल"} व्याख्यात्मक चित्र का सुझाव।`
+      : `## Figure Suggestions\n### Figure 1\nSuggested ${colorMode === "color" ? "color" : "standard"} explanatory visual for ${topic}.`
+    : "";
+
+  if (documentType === "research-paper") {
+    return isHindi
+      ? `# ${topic}: शोध पत्र मसौदा
+
+## Abstract
+${descriptionLine}
+
+## Introduction
+${topic} के महत्व, दायरे और संदर्भ का संक्षिप्त परिचय दें।
+
+## Literature Review
+उपलब्ध विचारों, दृष्टिकोणों और प्रमुख बहसों का सार प्रस्तुत करें।
+
+## Methodology
+संभावित शोध पद्धति, डेटा स्रोत और विश्लेषण फ्रेमवर्क बताएं।
+
+## Findings and Analysis
+मुख्य निष्कर्ष, पैटर्न, तर्क और सीमाओं का विश्लेषण दें।
+
+## Conclusion
+मुख्य निष्कर्षों और आगे की दिशा का सार दें।
+
+## References
+- संदर्भ 1
+- संदर्भ 2
+
+${imageBlock}`.trim()
+      : `# ${topic}: Research Paper Draft
+
+## Abstract
+${descriptionLine}
+
+## Introduction
+Introduce the context, purpose, and academic relevance of ${topic}.
+
+## Literature Review
+Summarize major viewpoints, debates, and prior work related to ${topic}.
+
+## Methodology
+Explain an appropriate research method, data approach, and evaluation strategy.
+
+## Findings and Analysis
+Present analytical observations, implications, and limitations.
+
+## Conclusion
+Summarize the key outcome and suggest future work.
+
+## References
+- Reference 1
+- Reference 2
+
+${imageBlock}`.trim();
+  }
+
+  if (documentType === "topic-note") {
+    return isHindi
+      ? `# ${topic}: टॉपिक नोट्स
+
+## Overview
+${descriptionLine}
+
+## Key Definitions
+- महत्वपूर्ण शब्द 1
+- महत्वपूर्ण शब्द 2
+
+## Main Points
+- बिंदु 1
+- बिंदु 2
+- बिंदु 3
+
+## Examples
+संक्षिप्त उदाहरण और उपयोग।
+
+## Quick Revision
+- दोहराने योग्य सारांश
+- परीक्षा/इंटरव्यू के लिए मुख्य बातें
+
+${imageBlock}`.trim()
+      : `# ${topic}: Topic Notes
+
+## Overview
+${descriptionLine}
+
+## Key Definitions
+- Important term 1
+- Important term 2
+
+## Main Points
+- Key point 1
+- Key point 2
+- Key point 3
+
+## Examples
+Short examples and practical cues.
+
+## Quick Revision
+- Fast recap
+- Interview/exam ready pointers
+
+${imageBlock}`.trim();
+  }
+
+  return isHindi
+    ? `# ${topic}: पुस्तक मसौदा
+
+## Outline
+1. ${topic} की आधारभूत समझ
+2. मुख्य अवधारणाएँ
+3. व्यावहारिक उपयोग
+4. उन्नत विश्लेषण
+5. पुनरावृत्ति और आगे की दिशा
+
+## Chapter 1: ${topic} की आधारभूत समझ
+${descriptionLine}
+
+### Context
+इस पुस्तक का उद्देश्य, पाठक वर्ग और उपयोग बताएं।
+
+### Key Terms
+महत्वपूर्ण शब्द और मूल अवधारणाएँ समझाएँ।
+
+### Learning Path
+आगे के अध्याय कैसे ज्ञान को विकसित करेंगे, यह बताएँ।
+
+## Chapter 2: मुख्य अवधारणाएँ
+विषय की मूल संरचना और प्रमुख सिद्धांत समझाएँ।
+
+### Essential Principles
+मुख्य सिद्धांत सरल भाषा में लिखें।
+
+### Models and Frameworks
+उपयोगी मॉडल और फ्रेमवर्क बताएँ।
+
+### Common Misunderstandings
+आम गलतफहमियों को स्पष्ट करें।
+
+## Chapter 3: व्यावहारिक उपयोग
+वास्तविक उपयोग, प्रक्रिया और उदाहरण दें।
+
+### Practical Workflow
+काम करने की चरणबद्ध प्रक्रिया बताएँ।
+
+### Tools and Resources
+सहायक साधन और स्रोत बताएँ।
+
+### Example Scenario
+एक व्यावहारिक उदाहरण समझाएँ।
+
+## Chapter 4: उन्नत विश्लेषण
+उन्नत विचार, सीमाएँ और तुलना दें।
+
+### Emerging Ideas
+नए रुझानों का उल्लेख करें।
+
+### Critical Evaluation
+ताकत और सीमाओं का विश्लेषण करें।
+
+### Integration
+उन्नत विचारों को मूल अवधारणाओं से जोड़ें।
+
+## Chapter 5: पुनरावृत्ति और आगे की दिशा
+सीख को पक्का करने और आगे बढ़ने के लिए मार्गदर्शन दें।
+
+### Review Questions
+पुनरावृत्ति प्रश्न दें।
+
+### Project Ideas
+उपयोगी प्रोजेक्ट या असाइनमेंट सुझाव दें।
+
+### Roadmap
+आगे की पढ़ाई या कार्ययोजना बताएँ।
+
+## Summary
+यह मसौदा आगे संपादन, विस्तार और निर्यात के लिए तैयार है।
+
+${imageBlock}`.trim()
+    : `# ${topic}: Generated Book
 
 ## Outline
 1. Foundations of ${topic}
@@ -98,7 +285,7 @@ function buildMockBook({ topic, description, bookType }) {
 ${descriptionLine}
 
 ### Context
-Introduce the purpose, audience, and learning goals for this ${bookType}.
+Introduce the purpose, audience, and learning goals for this book.
 
 ### Key Terms
 Define the major terms and principles someone needs before moving deeper.
@@ -156,7 +343,8 @@ Recommend the next stage of study or implementation.
 
 ## Summary
 This editable draft gives you a complete starting point that can be refined, expanded, or exported.
-`;
+
+${imageBlock}`.trim();
 }
 
 async function generateWithConfiguredProvider(input) {

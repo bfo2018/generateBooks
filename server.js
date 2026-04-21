@@ -3,6 +3,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 
 const connectToDatabase = require("./src/config/db");
+const { authRouter } = require("./src/routes/auth");
 const projectRoutes = require("./src/routes/projects");
 
 dotenv.config();
@@ -24,6 +25,7 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+app.use("/api/auth", authRouter);
 app.use("/api/projects", projectRoutes);
 
 app.get("*", (_req, res) => {

@@ -16,10 +16,15 @@ function createMemoryProject(input) {
   const now = new Date().toISOString();
 
   return {
+    userId: input.userId,
     _id: `demo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     topic: input.topic,
     description: input.description || "",
-    bookType: input.bookType,
+    documentType: input.documentType,
+    language: input.language || "english",
+    paperSize: input.paperSize || "A4",
+    includeImages: Boolean(input.includeImages),
+    colorMode: input.colorMode || "standard",
     provider: input.provider || "mock",
     outline: input.outline || "",
     content: input.content || "",
@@ -34,11 +39,12 @@ function createMemoryProject(input) {
       paymentMode: "demo",
       previewPageLimit: 3,
       wordsPerPage: 450,
-      platformFeeInr: 50,
+      platformFeeInr: 0,
       inputCostPer1kTokensInr: 0.4,
       outputCostPer1kTokensInr: 1.2,
+      imageChargeInr: 0,
       tokenCostInr: 0,
-      totalChargeInr: 50,
+      totalChargeInr: 0,
       wordCount: 0,
       estimatedPages: 1,
       previewContent: "",
@@ -56,12 +62,14 @@ function createMemoryProject(input) {
   };
 }
 
-async function listProjects() {
+async function listProjects(userId) {
   if (process.env.STORAGE_MODE === "memory") {
-    return sortByUpdatedAtDescending(memoryProjects).map(cloneProject);
+    return sortByUpdatedAtDescending(memoryProjects)
+      .filter((project) => project.userId === userId)
+      .map(cloneProject);
   }
 
-  return Project.find().sort({ updatedAt: -1 }).lean();
+  return Project.find({ userId }).sort({ updatedAt: -1 }).lean();
 }
 
 async function createProject(data) {

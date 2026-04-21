@@ -44,12 +44,13 @@ async function createDocxBuffer(markdown) {
   return Packer.toBuffer(document);
 }
 
-function createPdfBuffer(markdown) {
+function createPdfBuffer(markdown, options = {}) {
   const items = toStructuredParagraphs(markdown);
+  const pageSize = options.paperSize || "A4";
 
   return new Promise((resolve, reject) => {
     const chunks = [];
-    const pdf = new PDFDocument({ margin: 50, size: "A4" });
+    const pdf = new PDFDocument({ margin: 50, size: pageSize });
 
     pdf.on("data", (chunk) => chunks.push(chunk));
     pdf.on("end", () => resolve(Buffer.concat(chunks)));

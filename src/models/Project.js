@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const projectSchema = new mongoose.Schema(
   {
+    userId: {
+      type: String,
+      required: true,
+      index: true,
+    },
     topic: {
       type: String,
       required: true,
@@ -12,10 +17,29 @@ const projectSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
-    bookType: {
+    documentType: {
       type: String,
-      enum: ["syllabus", "research", "textbook"],
+      enum: ["book", "research-paper", "topic-note"],
       required: true,
+    },
+    language: {
+      type: String,
+      enum: ["english", "hindi"],
+      default: "english",
+    },
+    paperSize: {
+      type: String,
+      enum: ["A4", "A5", "Letter"],
+      default: "A4",
+    },
+    includeImages: {
+      type: Boolean,
+      default: false,
+    },
+    colorMode: {
+      type: String,
+      enum: ["standard", "color"],
+      default: "standard",
     },
     provider: {
       type: String,
@@ -76,6 +100,10 @@ const projectSchema = new mongoose.Schema(
       outputCostPer1kTokensInr: {
         type: Number,
         default: 1.2,
+      },
+      imageChargeInr: {
+        type: Number,
+        default: 0,
       },
       tokenCostInr: {
         type: Number,

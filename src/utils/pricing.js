@@ -39,7 +39,8 @@ function getPricingConfig() {
   return {
     currency: "INR",
     paymentMode: (process.env.PAYMENT_MODE || "demo").toLowerCase(),
-    platformFeeInr: toMoneyNumber(process.env.PLATFORM_FEE_INR, 50),
+    platformFeeInr: toMoneyNumber(process.env.PLATFORM_FEE_INR, 9),
+    freeTrialDays: Math.max(0, Number(process.env.FREE_TRIAL_DAYS) || 10),
     inputCostPer1kTokensInr: toMoneyNumber(
       process.env.INPUT_COST_PER_1K_TOKENS_INR,
       0.4
@@ -48,13 +49,44 @@ function getPricingConfig() {
       process.env.OUTPUT_COST_PER_1K_TOKENS_INR,
       1.2
     ),
+    imageChargeInr: toMoneyNumber(process.env.COLOR_IMAGE_CHARGE_INR, 19),
     previewPageLimit: Math.max(1, Number(process.env.PREVIEW_PAGE_LIMIT) || 3),
     wordsPerPage: Math.max(120, Number(process.env.WORDS_PER_PREVIEW_PAGE) || 450),
     razorpayKeyId: process.env.RAZORPAY_KEY_ID || "",
   };
 }
 
-function calculateProjectPricing({ content = "", usage = {} }) {
+function getDefaultPaperSize(documentType) {
+  if (documentType === "topic-note") {
+    return "A5";
+  }
+
+  if (documentType === "research-paper") {
+    return "Letter";
+  }
+
+  return "A4";
+}
+
+function isWithinFreeTrial(userCreatedAt) {
+  if (!userCreatedAt) {
+    return false;
+  }
+
+  const config = getPricingConfig();
+  const createdAt = new Date(userCreatedAt);
+  const diffMs = Date.now() - createdAt.getTime();
+  return diffMs <= config.freeTrialDays * 24 * 60 * 60 * 1000;
+}
+
+function calculateProjectPricing({
+  content = "",
+  usage = {},
+  userCreatedAt,
+  includeImages = false,
+  colorMode = "standard",
+  documentType = "book",
+}) {
   const config = getPricingConfig();
   const normalizedUsage = normalizeUsage(usage, content);
   const promptCostInr =
@@ -67,19 +99,24 @@ function calculateProjectPricing({ content = "", usage = {} }) {
     toStructuredParagraphs(content),
     config.wordsPerPage
   );
+  const platformFeeInr = isWithinFreeTrial(userCreatedAt) ? 0 : config.platformFeeInr;
+  const imageChargeInr = includeImages && colorMode === "color" ? config.imageChargeInr : 0;
 
   return {
     currency: config.currency,
     paymentMode: config.paymentMode,
     previewPageLimit: config.previewPageLimit,
     wordsPerPage: config.wordsPerPage,
-    platformFeeInr: Number(config.platformFeeInr.toFixed(2)),
+    platformFeeInr: Number(platformFeeInr.toFixed(2)),
     inputCostPer1kTokensInr: Number(config.inputCostPer1kTokensInr.toFixed(4)),
     outputCostPer1kTokensInr: Number(config.outputCostPer1kTokensInr.toFixed(4)),
+    imageChargeInr: Number(imageChargeInr.toFixed(2)),
     tokenCostInr: Number(tokenCostInr.toFixed(2)),
-    totalChargeInr: Number((tokenCostInr + config.platformFeeInr).toFixed(2)),
+    totalChargeInr: Number((tokenCostInr + platformFeeInr + imageChargeInr).toFixed(2)),
     wordCount: countWords(content),
     estimatedPages: paragraphPages.length || 1,
+    paperSize: getDefaultPaperSize(documentType),
+    freeTrialActive: isWithinFreeTrial(userCreatedAt),
     previewContent: buildPreviewMarkdown(
       content,
       config.previewPageLimit,
@@ -91,6 +128,8 @@ function calculateProjectPricing({ content = "", usage = {} }) {
 module.exports = {
   calculateProjectPricing,
   estimateTokenCount,
+  getDefaultPaperSize,
   getPricingConfig,
+  isWithinFreeTrial,
   normalizeUsage,
 };

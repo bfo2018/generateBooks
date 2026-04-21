@@ -1,4 +1,6 @@
 const state = {
+  token: localStorage.getItem("bookforge-token") || "",
+  user: null,
   provider: "loading",
   paymentMode: "loading",
   paymentKeyId: "",
@@ -8,12 +10,19 @@ const state = {
 };
 
 const elements = {
+  authView: document.getElementById("authView"),
+  appView: document.getElementById("appView"),
+  loginForm: document.getElementById("loginForm"),
+  registerForm: document.getElementById("registerForm"),
+  profileForm: document.getElementById("profileForm"),
+  logoutButton: document.getElementById("logoutButton"),
   generatorForm: document.getElementById("generatorForm"),
   generateButton: document.getElementById("generateButton"),
   refreshProjects: document.getElementById("refreshProjects"),
   projectList: document.getElementById("projectList"),
   providerBadge: document.getElementById("providerBadge"),
   paymentBadge: document.getElementById("paymentBadge"),
+  trialBadge: document.getElementById("trialBadge"),
   contentEditor: document.getElementById("contentEditor"),
   saveButton: document.getElementById("saveButton"),
   unlockButton: document.getElementById("unlockButton"),
@@ -24,23 +33,39 @@ const elements = {
   toast: document.getElementById("toast"),
   topic: document.getElementById("topic"),
   description: document.getElementById("description"),
-  bookType: document.getElementById("bookType"),
+  documentType: document.getElementById("documentType"),
+  language: document.getElementById("language"),
+  paperSize: document.getElementById("paperSize"),
+  colorMode: document.getElementById("colorMode"),
+  includeImages: document.getElementById("includeImages"),
   pricingTotal: document.getElementById("pricingTotal"),
   pricingHint: document.getElementById("pricingHint"),
   tokenUsage: document.getElementById("tokenUsage"),
   pageEstimate: document.getElementById("pageEstimate"),
-  previewLimit: document.getElementById("previewLimit"),
+  paperSizeLabel: document.getElementById("paperSizeLabel"),
   accessState: document.getElementById("accessState"),
-  previewScroll: document.getElementById("previewScroll"),
   previewContainer: document.getElementById("previewContainer"),
   lockCard: document.getElementById("lockCard"),
   lockMessage: document.getElementById("lockMessage"),
   lockAction: document.getElementById("lockAction"),
-  stickyUnlockBar: document.getElementById("stickyUnlockBar"),
-  stickyUnlockLabel: document.getElementById("stickyUnlockLabel"),
-  stickyUnlockHint: document.getElementById("stickyUnlockHint"),
-  stickyUnlockButton: document.getElementById("stickyUnlockButton"),
-  editorLockNotice: document.getElementById("editorLockNotice"),
+  historyGenerated: document.getElementById("historyGenerated"),
+  historyUnlocked: document.getElementById("historyUnlocked"),
+  profileName: document.getElementById("profileName"),
+  profileMobile: document.getElementById("profileMobile"),
+  profileEmail: document.getElementById("profileEmail"),
+  profileQualification: document.getElementById("profileQualification"),
+  profileAddress: document.getElementById("profileAddress"),
+  loginEmail: document.getElementById("loginEmail"),
+  loginPassword: document.getElementById("loginPassword"),
+  registerName: document.getElementById("registerName"),
+  registerMobile: document.getElementById("registerMobile"),
+  registerEmail: document.getElementById("registerEmail"),
+  registerAddress: document.getElementById("registerAddress"),
+  registerQualification: document.getElementById("registerQualification"),
+  registerPassword: document.getElementById("registerPassword"),
+  loaderOverlay: document.getElementById("loaderOverlay"),
+  loaderTitle: document.getElementById("loaderTitle"),
+  loaderText: document.getElementById("loaderText"),
 };
 
 function escapeHtml(value) {
@@ -61,13 +86,25 @@ function showToast(message) {
   }, 2800);
 }
 
+function setLoader(visible, title, text) {
+  elements.loaderOverlay.hidden = !visible;
+  if (title) elements.loaderTitle.textContent = title;
+  if (text) elements.loaderText.textContent = text;
+}
+
 async function api(url, options = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  };
+
+  if (state.token) {
+    headers.Authorization = `Bearer ${state.token}`;
+  }
+
   const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
     ...options,
+    headers,
   });
 
   const contentType = response.headers.get("content-type") || "";
@@ -75,10 +112,51 @@ async function api(url, options = {}) {
   const data = isJson ? await response.json() : await response.blob();
 
   if (!response.ok) {
+    if (response.status === 401 && state.token) {
+      clearSession();
+      renderShell();
+    }
+
     throw new Error(data.message || "Request failed.");
   }
 
   return data;
+}
+
+async function downloadFile(url, filename) {
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${state.token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: "Download failed." }));
+    throw new Error(error.message || "Download failed.");
+  }
+
+  const blob = await response.blob();
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+}
+
+function clearSession() {
+  state.token = "";
+  state.user = null;
+  state.projects = [];
+  state.selectedProjectId = null;
+  localStorage.removeItem("bookforge-token");
+}
+
+function saveSession(token, user) {
+  state.token = token;
+  state.user = user;
+  localStorage.setItem("bookforge-token", token);
 }
 
 function getSelectedProject() {
@@ -87,6 +165,12 @@ function getSelectedProject() {
 
 function formatMoney(value) {
   return `Rs ${Number(value || 0).toFixed(2)}`;
+}
+
+function getPaperSizeForType(documentType) {
+  if (documentType === "topic-note") return "A5";
+  if (documentType === "research-paper") return "Letter";
+  return "A4";
 }
 
 function splitMarkdownLines(markdown) {
@@ -98,96 +182,56 @@ function toStructuredParagraphs(markdown) {
     .map((line) => line.trimEnd())
     .filter((line, index, lines) => line || lines[index - 1])
     .map((line) => {
-      if (line.startsWith("# ")) {
-        return { type: "title", text: line.replace(/^# /, "") };
-      }
-      if (line.startsWith("## ")) {
-        return { type: "heading", text: line.replace(/^## /, "") };
-      }
-      if (line.startsWith("### ")) {
-        return { type: "subheading", text: line.replace(/^### /, "") };
-      }
+      if (line.startsWith("# ")) return { type: "title", text: line.replace(/^# /, "") };
+      if (line.startsWith("## ")) return { type: "heading", text: line.replace(/^## /, "") };
+      if (line.startsWith("### ")) return { type: "subheading", text: line.replace(/^### /, "") };
+      if (line.startsWith("- ")) return { type: "bullet", text: line.replace(/^- /, "") };
       return { type: "body", text: line };
     });
 }
 
-function countWords(value = "") {
-  const normalized = String(value).trim();
-  return normalized ? normalized.split(/\s+/).length : 0;
-}
-
-function estimateParagraphWords(item) {
-  const base = Math.max(1, countWords(item.text));
-
-  if (item.type === "title") return base + 20;
-  if (item.type === "heading") return base + 14;
-  if (item.type === "subheading") return base + 8;
-
-  return base;
-}
-
-function paginateMarkdown(markdown, wordsPerPage) {
-  const items = toStructuredParagraphs(markdown);
-  const safeWordsPerPage = Math.max(120, Number(wordsPerPage) || 450);
-  const pages = [];
-  let currentPage = [];
-  let currentWeight = 0;
-
-  items.forEach((item) => {
-    const itemWeight = estimateParagraphWords(item);
-
-    if (currentPage.length && currentWeight + itemWeight > safeWordsPerPage) {
-      pages.push(currentPage);
-      currentPage = [];
-      currentWeight = 0;
-    }
-
-    currentPage.push(item);
-    currentWeight += itemWeight;
-  });
-
-  if (currentPage.length) {
-    pages.push(currentPage);
-  }
-
-  return pages;
-}
-
 function renderPageItem(item) {
-  if (!item.text) {
-    return "<p>&nbsp;</p>";
-  }
-
-  if (item.type === "title") {
-    return `<h1>${escapeHtml(item.text)}</h1>`;
-  }
-
-  if (item.type === "heading") {
-    return `<h2>${escapeHtml(item.text)}</h2>`;
-  }
-
-  if (item.type === "subheading") {
-    return `<h3>${escapeHtml(item.text)}</h3>`;
-  }
-
+  if (!item.text) return "<p>&nbsp;</p>";
+  if (item.type === "title") return `<h1>${escapeHtml(item.text)}</h1>`;
+  if (item.type === "heading") return `<h2>${escapeHtml(item.text)}</h2>`;
+  if (item.type === "subheading") return `<h3>${escapeHtml(item.text)}</h3>`;
+  if (item.type === "bullet") return `<p class="bullet-item">• ${escapeHtml(item.text)}</p>`;
   return `<p>${escapeHtml(item.text)}</p>`;
+}
+
+function renderShell() {
+  const isLoggedIn = Boolean(state.token && state.user);
+  elements.authView.hidden = isLoggedIn;
+  elements.appView.hidden = !isLoggedIn;
+}
+
+function populateProfile() {
+  const user = state.user;
+  if (!user) return;
+
+  elements.profileName.value = user.name || "";
+  elements.profileMobile.value = user.mobileNumber || "";
+  elements.profileEmail.value = user.email || "";
+  elements.profileQualification.value = user.qualification || "";
+  elements.profileAddress.value = user.address || "";
 }
 
 function updateActionButtons() {
   const project = getSelectedProject();
-  const hasSelection = Boolean(project);
   const isPaid = project?.payment?.status === "paid";
+  const hasProject = Boolean(project);
 
   elements.saveButton.disabled = !isPaid;
-  elements.unlockButton.disabled = !hasSelection || isPaid;
+  elements.unlockButton.disabled = !hasProject || isPaid;
   elements.downloadDocx.disabled = !isPaid;
   elements.downloadPdf.disabled = !isPaid;
+  elements.lockAction.disabled = !hasProject || isPaid;
 }
 
 function renderProjects() {
   if (!state.projects.length) {
     elements.projectList.innerHTML =
-      '<p class="muted">No AI books yet. Generate your first draft.</p>';
+      '<p class="muted">No documents generated yet. Create the first one from the form.</p>';
     return;
   }
 
@@ -195,13 +239,12 @@ function renderProjects() {
     .map((project) => {
       const isActive = project._id === state.selectedProjectId;
       const updated = new Date(project.updatedAt).toLocaleString();
-      const accessLabel = project.payment?.status === "paid" ? "Unlocked" : "Locked";
-
       return `
         <button class="project-card ${isActive ? "active" : ""}" data-id="${project._id}" type="button">
           <h3>${escapeHtml(project.topic)}</h3>
-          <p>${escapeHtml(project.bookType)} • ${escapeHtml(project.provider)}</p>
-          <p>${accessLabel} • ${formatMoney(project.pricing?.totalChargeInr)}</p>
+          <p>${escapeHtml(project.documentType)} • ${escapeHtml(project.language)}</p>
+          <p>${escapeHtml(project.paperSize)} • ${project.includeImages ? "Image-ready" : "Text-only"}</p>
+          <p>${project.payment?.status === "paid" ? "Unlocked" : "Locked"} • ${formatMoney(project.pricing?.totalChargeInr)}</p>
           <p>Updated ${updated}</p>
         </button>
       `;
@@ -209,109 +252,80 @@ function renderProjects() {
     .join("");
 
   document.querySelectorAll(".project-card").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectProject(button.dataset.id);
-    });
+    button.addEventListener("click", () => selectProject(button.dataset.id));
   });
 }
 
+function renderSummary(summary) {
+  elements.historyGenerated.textContent = String(summary?.generatedDocuments || 0);
+  elements.historyUnlocked.textContent = String(summary?.paidDocuments || 0);
+  elements.trialBadge.textContent = summary?.freeTrialActive
+    ? "Free Trial: active"
+    : "Free Trial: platform fee applies";
+}
+
 function renderPricing(project) {
-  const pricing = project?.pricing;
-  const usage = project?.usage;
+  const pricing = project?.pricing || {};
   const isPaid = project?.payment?.status === "paid";
 
-  elements.pricingTotal.textContent = pricing
-    ? formatMoney(pricing.totalChargeInr)
-    : "Rs 0.00";
-  elements.pricingHint.textContent = pricing
-    ? `LLM token cost ${formatMoney(pricing.tokenCostInr)} + platform fee ${formatMoney(
-        pricing.platformFeeInr
-      )}`
-    : "Generate a draft to calculate token-based pricing.";
-  elements.tokenUsage.textContent = usage?.totalTokens
-    ? usage.totalTokens.toLocaleString()
-    : "0";
-  elements.pageEstimate.textContent = String(pricing?.estimatedPages || 0);
-  elements.previewLimit.textContent = `${pricing?.previewPageLimit || 3} pages`;
+  elements.pricingTotal.textContent = formatMoney(pricing.totalChargeInr || 0);
+  elements.pricingHint.textContent = `Token ${formatMoney(pricing.tokenCostInr || 0)} + platform ${formatMoney(
+    pricing.platformFeeInr || 0
+  )} + image charge ${formatMoney(pricing.imageChargeInr || 0)}`;
+  elements.tokenUsage.textContent = String(project?.usage?.totalTokens || 0);
+  elements.pageEstimate.textContent = String(pricing.estimatedPages || 0);
+  elements.paperSizeLabel.textContent = project?.paperSize || pricing.paperSize || "A4";
   elements.accessState.textContent = isPaid ? "Unlocked" : "Locked";
   elements.lockMessage.textContent = isPaid
-    ? "Full preview and exports are unlocked."
-    : `Only the first ${pricing?.previewPageLimit || 3} pages are visible until payment clears.`;
-  elements.stickyUnlockLabel.textContent = isPaid
-    ? "Book unlocked"
-    : `Unlock full book for ${formatMoney(pricing?.totalChargeInr)}`;
-  elements.stickyUnlockHint.textContent = isPaid
-    ? "Full preview and downloads are enabled."
-    : "Pay with Razorpay to unlock the full preview, editor, DOCX, and PDF exports.";
+    ? "Full document access is enabled."
+    : `Only ${pricing.previewPageLimit || 3} preview pages are visible until payment clears.`;
 }
 
 function renderPreview(project) {
   if (!project) {
     elements.previewContainer.innerHTML = "";
     elements.lockCard.hidden = true;
-    elements.stickyUnlockBar.hidden = true;
     return;
   }
 
-  const pricing = project.pricing || {};
-  const previewLimit = pricing.previewPageLimit || 3;
-  const wordsPerPage = pricing.wordsPerPage || 450;
-  const isPaid = project.payment?.status === "paid";
-  const pages = paginateMarkdown(project.content || project.previewContent || "", wordsPerPage);
+  const content = project.content || project.previewContent || "";
+  const items = toStructuredParagraphs(content);
+  const cards = [];
+  let page = [];
 
-  elements.previewContainer.innerHTML = pages
-    .map((page, index) => {
-      return `
+  items.forEach((item, index) => {
+    page.push(item);
+    if (page.length >= 8 || index === items.length - 1) {
+      cards.push(page);
+      page = [];
+    }
+  });
+
+  elements.previewContainer.innerHTML = cards
+    .map(
+      (group, index) => `
         <article class="preview-page">
           <div class="preview-page-header">
-            <span>Preview Page ${index + 1}</span>
-            <span>${escapeHtml(project.topic)}</span>
+            <span>Page ${index + 1}</span>
+            <span>${escapeHtml(project.paperSize || "A4")}</span>
           </div>
-          ${page.map(renderPageItem).join("")}
+          ${group.map(renderPageItem).join("")}
         </article>
-      `;
-    })
+      `
+    )
     .join("");
 
-  if (!isPaid && project.hasLockedContent) {
-    elements.previewContainer.insertAdjacentHTML(
-      "beforeend",
-      `
-        <article class="preview-page locked-page">
-          <div class="preview-page-header">
-            <span>Page ${previewLimit + 1} onward</span>
-            <span>Locked</span>
-          </div>
-          <div class="lock-overlay">
-            <div>
-              <p class="mini-label">Unlock Required</p>
-              <h3>Pay and download the complete AI book</h3>
-              <p class="muted">The rest of the chapters, full preview, editor, DOCX, and PDF remain locked.</p>
-            </div>
-          </div>
-        </article>
-      `
-    );
-  }
-
-  elements.lockCard.hidden = isPaid || !project.hasLockedContent;
-  elements.stickyUnlockBar.hidden = true;
-  elements.previewScroll.scrollTop = 0;
-  handlePreviewScroll();
+  elements.lockCard.hidden = project.payment?.status === "paid" || !project.hasLockedContent;
 }
 
 function renderEditor(project) {
   if (!project) {
-    elements.contentEditor.hidden = true;
-    elements.contentEditor.disabled = true;
     elements.contentEditor.value = "";
-    elements.editorLockNotice.hidden = true;
+    elements.contentEditor.disabled = true;
     return;
   }
 
-  const isPaid = project?.payment?.status === "paid";
-  elements.contentEditor.hidden = !isPaid;
-  elements.editorLockNotice.hidden = isPaid;
+  const isPaid = project.payment?.status === "paid";
   elements.contentEditor.disabled = !isPaid;
   elements.contentEditor.value = isPaid ? project.content || "" : "";
 }
@@ -321,23 +335,32 @@ function selectProject(projectId) {
   if (!project) return;
 
   state.selectedProjectId = projectId;
-  elements.topic.value = project.topic;
-  elements.description.value = project.description;
-  elements.bookType.value = project.bookType;
+  elements.topic.value = project.topic || "";
+  elements.description.value = project.description || "";
+  elements.documentType.value = project.documentType || "book";
+  elements.language.value = project.language || "english";
+  elements.paperSize.value = project.paperSize || getPaperSizeForType(project.documentType);
+  elements.colorMode.value = project.colorMode || "standard";
+  elements.includeImages.checked = Boolean(project.includeImages);
   elements.editorTitle.textContent = project.topic;
-  elements.editorMeta.textContent = `${project.bookType} draft via ${project.provider}`;
-
+  elements.editorMeta.textContent = `${project.documentType} • ${project.language} • ${project.provider}`;
   renderPricing(project);
   renderPreview(project);
   renderEditor(project);
-  updateActionButtons();
   renderProjects();
+  updateActionButtons();
+}
+
+function upsertProject(project) {
+  const index = state.projects.findIndex((item) => item._id === project._id);
+  if (index === -1) state.projects.unshift(project);
+  else state.projects[index] = project;
 }
 
 async function loadHealth() {
-  const data = await api("/api/health");
+  const data = await api("/api/health", { headers: {} });
   state.provider = data.provider;
-  elements.providerBadge.textContent = `Provider: ${state.provider}`;
+  elements.providerBadge.textContent = `Provider: ${data.provider}`;
 }
 
 async function loadConfig() {
@@ -348,71 +371,156 @@ async function loadConfig() {
   elements.paymentBadge.textContent = `Payments: ${state.paymentMode}`;
 }
 
+async function loadProfile() {
+  const data = await api("/api/auth/me");
+  state.user = data.user;
+  populateProfile();
+}
+
 async function loadProjects() {
-  const projects = await api("/api/projects");
-  state.projects = projects;
+  const data = await api("/api/projects");
+  state.projects = data.projects || [];
+  renderSummary(data.summary || {});
 
-  if (state.selectedProjectId) {
-    const stillExists = projects.some(
-      (project) => project._id === state.selectedProjectId
-    );
-    if (!stillExists) {
-      state.selectedProjectId = null;
-    }
-  }
-
-  if (!state.selectedProjectId && projects.length) {
-    selectProject(projects[0]._id);
+  if (!state.projects.length) {
+    state.selectedProjectId = null;
+    elements.editorTitle.textContent = "Generated Content";
+    elements.editorMeta.textContent = "Select or generate a document to start editing.";
+    renderPricing(null);
+    renderPreview(null);
+    renderEditor(null);
+    renderProjects();
+    updateActionButtons();
     return;
   }
 
-  if (!projects.length) {
-    elements.editorTitle.textContent = "Generated Content";
-    elements.editorMeta.textContent =
-      "Select or generate a project to start editing.";
-    renderPreview(null);
-    renderEditor(null);
-    renderPricing(null);
+  if (!state.selectedProjectId || !state.projects.some((item) => item._id === state.selectedProjectId)) {
+    state.selectedProjectId = state.projects[0]._id;
   }
 
   renderProjects();
-  updateActionButtons();
+  selectProject(state.selectedProjectId);
 }
 
-function upsertProject(project) {
-  const index = state.projects.findIndex((item) => item._id === project._id);
+async function bootAuthenticatedApp() {
+  renderShell();
+  await Promise.all([loadProfile(), loadHealth(), loadConfig()]);
+  await loadProjects();
+}
 
-  if (index === -1) {
-    state.projects.unshift(project);
-  } else {
-    state.projects[index] = project;
+async function handleLogin(event) {
+  event.preventDefault();
+
+  try {
+    const data = await api("/api/auth/login", {
+      method: "POST",
+      headers: {},
+      body: JSON.stringify({
+        email: elements.loginEmail.value,
+        password: elements.loginPassword.value,
+      }),
+    });
+
+    saveSession(data.token, data.user);
+    await bootAuthenticatedApp();
+    showToast("Logged in successfully.");
+    elements.loginForm.reset();
+  } catch (error) {
+    showToast(error.message);
   }
+}
+
+async function handleRegister(event) {
+  event.preventDefault();
+
+  try {
+    const data = await api("/api/auth/register", {
+      method: "POST",
+      headers: {},
+      body: JSON.stringify({
+        name: elements.registerName.value,
+        mobileNumber: elements.registerMobile.value,
+        email: elements.registerEmail.value,
+        address: elements.registerAddress.value,
+        qualification: elements.registerQualification.value,
+        password: elements.registerPassword.value,
+      }),
+    });
+
+    saveSession(data.token, data.user);
+    await bootAuthenticatedApp();
+    showToast("Account created successfully.");
+    elements.registerForm.reset();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function handleProfileSave(event) {
+  event.preventDefault();
+
+  try {
+    const data = await api("/api/auth/me", {
+      method: "PUT",
+      body: JSON.stringify({
+        name: elements.profileName.value,
+        mobileNumber: elements.profileMobile.value,
+        email: elements.profileEmail.value,
+        qualification: elements.profileQualification.value,
+        address: elements.profileAddress.value,
+      }),
+    });
+
+    state.user = data.user;
+    populateProfile();
+    showToast("Profile updated.");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function handleLogout() {
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+  } catch (_error) {
+    // Ignore logout API issues and clear local session anyway.
+  }
+
+  clearSession();
+  renderShell();
+  showToast("Logged out.");
 }
 
 async function handleGenerate(event) {
   event.preventDefault();
   elements.generateButton.disabled = true;
-  elements.generateButton.textContent = "Generating...";
+  setLoader(true, "Generating your document", "Creating content, preview pages, and pricing details.");
 
   try {
+    const payload = {
+      topic: elements.topic.value,
+      description: elements.description.value,
+      documentType: elements.documentType.value,
+      language: elements.language.value,
+      paperSize: elements.paperSize.value,
+      includeImages: elements.includeImages.checked,
+      colorMode: elements.colorMode.value,
+    };
+
     const project = await api("/api/projects/generate", {
       method: "POST",
-      body: JSON.stringify({
-        topic: elements.topic.value,
-        description: elements.description.value,
-        bookType: elements.bookType.value,
-      }),
+      body: JSON.stringify(payload),
     });
 
     upsertProject(project);
+    await loadProjects();
     selectProject(project._id);
-    renderProjects();
-    showToast("AI book draft generated.");
+    showToast("Document generated successfully.");
   } catch (error) {
     showToast(error.message);
   } finally {
     elements.generateButton.disabled = false;
-    elements.generateButton.textContent = "Generate Book Draft";
+    setLoader(false);
   }
 }
 
@@ -420,37 +528,32 @@ async function handleSave() {
   const project = getSelectedProject();
   if (!project || project.payment?.status !== "paid") return;
 
-  elements.saveButton.disabled = true;
-
   try {
     const updated = await api(`/api/projects/${project._id}`, {
       method: "PUT",
       body: JSON.stringify({
         topic: elements.topic.value,
         description: elements.description.value,
-        bookType: elements.bookType.value,
+        documentType: elements.documentType.value,
+        language: elements.language.value,
+        paperSize: elements.paperSize.value,
+        includeImages: elements.includeImages.checked,
+        colorMode: elements.colorMode.value,
         content: elements.contentEditor.value,
       }),
     });
 
     upsertProject(updated);
     selectProject(updated._id);
-    showToast("Project saved.");
+    showToast("Document saved.");
   } catch (error) {
     showToast(error.message);
-  } finally {
-    updateActionButtons();
   }
 }
 
 function loadRazorpayScript() {
-  if (window.Razorpay) {
-    return Promise.resolve();
-  }
-
-  if (loadRazorpayScript.promise) {
-    return loadRazorpayScript.promise;
-  }
+  if (window.Razorpay) return Promise.resolve();
+  if (loadRazorpayScript.promise) return loadRazorpayScript.promise;
 
   loadRazorpayScript.promise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
@@ -471,21 +574,18 @@ async function unlockProject(projectId) {
   if (orderResponse.alreadyPaid) {
     upsertProject(orderResponse.project);
     selectProject(orderResponse.project._id);
-    showToast("This book is already unlocked.");
     return;
   }
 
   if (orderResponse.payment.mode !== "razorpay") {
     const verification = await api(`/api/projects/${projectId}/payment/verify`, {
       method: "POST",
-      body: JSON.stringify({
-        orderId: orderResponse.order.id,
-      }),
+      body: JSON.stringify({ orderId: orderResponse.order.id }),
     });
 
     upsertProject(verification.project);
+    await loadProjects();
     selectProject(verification.project._id);
-    showToast("Demo payment completed and book unlocked.");
     return;
   }
 
@@ -497,7 +597,7 @@ async function unlockProject(projectId) {
       amount: orderResponse.order.amount,
       currency: orderResponse.order.currency,
       name: "BookForge AI",
-      description: `Unlock full book: ${orderResponse.project.topic}`,
+      description: `Unlock ${orderResponse.project.topic}`,
       order_id: orderResponse.order.id,
       handler: async (response) => {
         try {
@@ -511,42 +611,36 @@ async function unlockProject(projectId) {
           });
 
           upsertProject(verification.project);
+          await loadProjects();
           selectProject(verification.project._id);
-          showToast("Payment verified. Full book unlocked.");
           resolve();
         } catch (error) {
           reject(error);
         }
       },
-      modal: {
-        ondismiss: () => reject(new Error("Payment was cancelled.")),
-      },
-      prefill: {},
       theme: {
         color: "#b24c2f",
       },
     });
 
+    razorpay.on("payment.failed", () => reject(new Error("Payment failed.")));
     razorpay.open();
   });
 }
 
 async function handleUnlock() {
   const project = getSelectedProject();
-  if (!project || project.payment?.status === "paid") return;
+  if (!project) return;
 
-  elements.unlockButton.disabled = true;
-  elements.lockAction.disabled = true;
-  elements.stickyUnlockButton.disabled = true;
+  setLoader(true, "Unlocking document", "Preparing payment and full-access state.");
 
   try {
     await unlockProject(project._id);
+    showToast("Document unlocked.");
   } catch (error) {
     showToast(error.message);
   } finally {
-    updateActionButtons();
-    elements.lockAction.disabled = false;
-    elements.stickyUnlockButton.disabled = false;
+    setLoader(false);
   }
 }
 
@@ -554,37 +648,57 @@ async function handleDownload(kind) {
   const project = getSelectedProject();
   if (!project) return;
 
-  if (project.payment?.status !== "paid") {
-    showToast("Pay and unlock the book before downloading.");
-    await handleUnlock();
+  try {
+    await downloadFile(
+      `/api/projects/${project._id}/export/${kind}`,
+      `${project.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "document"}.${kind}`
+    );
+    showToast(`${kind.toUpperCase()} download started.`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function handleDocumentTypeChange() {
+  elements.paperSize.value = getPaperSizeForType(elements.documentType.value);
+}
+
+function bindEvents() {
+  elements.loginForm.addEventListener("submit", handleLogin);
+  elements.registerForm.addEventListener("submit", handleRegister);
+  elements.profileForm.addEventListener("submit", handleProfileSave);
+  elements.logoutButton.addEventListener("click", handleLogout);
+  elements.refreshProjects.addEventListener("click", loadProjects);
+  elements.generatorForm.addEventListener("submit", handleGenerate);
+  elements.saveButton.addEventListener("click", handleSave);
+  elements.unlockButton.addEventListener("click", handleUnlock);
+  elements.lockAction.addEventListener("click", handleUnlock);
+  elements.downloadDocx.addEventListener("click", () => handleDownload("docx"));
+  elements.downloadPdf.addEventListener("click", () => handleDownload("pdf"));
+  elements.documentType.addEventListener("change", handleDocumentTypeChange);
+}
+
+async function init() {
+  bindEvents();
+  handleDocumentTypeChange();
+
+  try {
+    await loadHealth();
+  } catch (_error) {
+    elements.providerBadge.textContent = "Provider: unavailable";
+  }
+
+  if (!state.token) {
+    renderShell();
     return;
   }
 
-  window.location.href = `/api/projects/${project._id}/export/${kind}`;
-}
-
-function handlePreviewScroll() {
-  const project = getSelectedProject();
-
-  if (!project || project.payment?.status === "paid" || !project.hasLockedContent) {
-    elements.stickyUnlockBar.hidden = true;
-    return;
+  try {
+    await bootAuthenticatedApp();
+  } catch (_error) {
+    clearSession();
+    renderShell();
   }
-
-  const threshold = elements.previewScroll.scrollHeight * 0.35;
-  elements.stickyUnlockBar.hidden = elements.previewScroll.scrollTop < threshold;
 }
 
-elements.generatorForm.addEventListener("submit", handleGenerate);
-elements.saveButton.addEventListener("click", handleSave);
-elements.refreshProjects.addEventListener("click", loadProjects);
-elements.unlockButton.addEventListener("click", handleUnlock);
-elements.lockAction.addEventListener("click", handleUnlock);
-elements.stickyUnlockButton.addEventListener("click", handleUnlock);
-elements.downloadDocx.addEventListener("click", () => handleDownload("docx"));
-elements.downloadPdf.addEventListener("click", () => handleDownload("pdf"));
-elements.previewScroll.addEventListener("scroll", handlePreviewScroll);
-
-Promise.all([loadHealth(), loadConfig(), loadProjects()]).catch((error) => {
-  showToast(error.message);
-});
+init();

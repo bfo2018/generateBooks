@@ -7,180 +7,324 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div class="page-shell">
-      <aside class="sidebar">
-        <div>
-          <p class="eyebrow">AI Book Studio</p>
+      <section id="authView" class="auth-shell">
+        <div class="auth-hero">
+          <p class="eyebrow">AI Writing Workspace</p>
           <h1>BookForge</h1>
           <p class="muted">
-            Generate a syllabus, research draft, or textbook outline and refine
-            it before export.
+            Create books, research papers, and topic notes in Hindi or English with
+            profile-based history, pricing, and exports.
           </p>
         </div>
 
-        <div class="panel">
-          <div class="panel-header">
-            <h2>Saved Projects</h2>
-            <button id="refreshProjects" class="ghost-button" type="button">
-              Refresh
-            </button>
-          </div>
-          <div id="projectList" class="project-list"></div>
-        </div>
-      </aside>
-
-      <main class="main-content">
-        <section class="hero-card">
-          <div>
-            <p class="eyebrow">Structured Content Generator</p>
-            <h2>Build editable book drafts with a configurable AI backend</h2>
-          </div>
-          <div class="hero-status">
-            <div class="status-chip" id="providerBadge">Provider: loading...</div>
-            <div class="status-chip" id="paymentBadge">Payments: loading...</div>
-          </div>
-        </section>
-
-        <section class="workspace">
-          <form id="generatorForm" class="panel form-panel">
+        <div class="auth-cards">
+          <form id="loginForm" class="panel auth-panel">
             <div class="panel-header">
-              <h2>New Project</h2>
+              <h2>Login</h2>
             </div>
 
             <label>
-              Topic
-              <input
-                id="topic"
-                name="topic"
-                type="text"
-                placeholder="Example: Machine Learning for Agriculture"
-                required
-              />
+              Email
+              <input id="loginEmail" type="email" required />
             </label>
 
             <label>
-              Description
-              <textarea
-                id="description"
-                name="description"
-                rows="5"
-                placeholder="Describe the audience, coverage, tone, or goals."
-              ></textarea>
+              Password
+              <input id="loginPassword" type="password" required />
             </label>
 
-            <label>
-              Book Type
-              <select id="bookType" name="bookType" required>
-                <option value="syllabus">Syllabus</option>
-                <option value="research">Research</option>
-                <option value="textbook" selected>Textbook</option>
-              </select>
-            </label>
-
-            <button id="generateButton" class="primary-button" type="submit">
-              Generate Book Draft
-            </button>
+            <button class="primary-button" type="submit">Login</button>
           </form>
 
-          <section class="panel editor-panel">
+          <form id="registerForm" class="panel auth-panel">
             <div class="panel-header">
+              <h2>Register</h2>
+            </div>
+
+            <label>
+              Name
+              <input id="registerName" type="text" required />
+            </label>
+
+            <label>
+              Mobile Number
+              <input id="registerMobile" type="tel" required />
+            </label>
+
+            <label>
+              Email
+              <input id="registerEmail" type="email" required />
+            </label>
+
+            <label>
+              Address
+              <textarea id="registerAddress" rows="3" required></textarea>
+            </label>
+
+            <label>
+              Qualification
+              <input id="registerQualification" type="text" />
+            </label>
+
+            <label>
+              Password
+              <input id="registerPassword" type="password" required />
+            </label>
+
+            <button class="primary-button" type="submit">Create Account</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="appView" class="app-shell" hidden>
+        <aside class="sidebar">
+          <div class="brand-block">
+            <p class="eyebrow">Customer Workspace</p>
+            <h1>BookForge</h1>
+            <p class="muted">
+              Generate structured documents, track usage history, and manage profile details.
+            </p>
+          </div>
+
+          <section class="panel profile-panel">
+            <div class="panel-header">
+              <h2>Profile</h2>
+              <button id="logoutButton" class="ghost-button inline-button" type="button">
+                Logout
+              </button>
+            </div>
+
+            <form id="profileForm">
+              <label>
+                Name
+                <input id="profileName" type="text" required />
+              </label>
+
+              <label>
+                Mobile Number
+                <input id="profileMobile" type="tel" required />
+              </label>
+
+              <label>
+                Email
+                <input id="profileEmail" type="email" required />
+              </label>
+
+              <label>
+                Qualification
+                <input id="profileQualification" type="text" />
+              </label>
+
+              <label>
+                Address
+                <textarea id="profileAddress" rows="3" required></textarea>
+              </label>
+
+              <button id="saveProfileButton" class="ghost-button" type="submit">
+                Save Profile
+              </button>
+            </form>
+          </section>
+
+          <section class="panel history-panel">
+            <div class="panel-header">
+              <h2>History</h2>
+              <button id="refreshProjects" class="ghost-button inline-button" type="button">
+                Refresh
+              </button>
+            </div>
+            <div class="history-grid">
               <div>
-                <h2 id="editorTitle">Generated Content</h2>
-                <p id="editorMeta" class="muted">
-                  Select or generate a project to start editing.
-                </p>
+                <p class="mini-label">Generated</p>
+                <strong id="historyGenerated">0</strong>
               </div>
-              <div class="action-row">
-                <button id="saveButton" class="ghost-button" type="button" disabled>
-                  Save
-                </button>
-                <button id="unlockButton" class="primary-button inline-button" type="button" disabled>
+              <div>
+                <p class="mini-label">Unlocked</p>
+                <strong id="historyUnlocked">0</strong>
+              </div>
+            </div>
+            <div id="projectList" class="project-list"></div>
+          </section>
+        </aside>
+
+        <main class="main-content">
+          <section class="hero-card">
+            <div>
+              <p class="eyebrow">Smart Generator</p>
+              <h2>Create a book, research paper, or topic note with the right structure</h2>
+            </div>
+            <div class="hero-status">
+              <div class="status-chip" id="providerBadge">Provider: loading...</div>
+              <div class="status-chip" id="paymentBadge">Payments: loading...</div>
+              <div class="status-chip" id="trialBadge">Free Trial: loading...</div>
+            </div>
+          </section>
+
+          <section class="workspace">
+            <form id="generatorForm" class="panel form-panel">
+              <div class="panel-header">
+                <h2>New Document</h2>
+              </div>
+
+              <label>
+                Topic
+                <input
+                  id="topic"
+                  type="text"
+                  placeholder="Example: GST Compliance for Small Businesses"
+                  required
+                />
+              </label>
+
+              <label>
+                Description
+                <textarea
+                  id="description"
+                  rows="5"
+                  placeholder="Audience, purpose, syllabus, or research angle."
+                ></textarea>
+              </label>
+
+              <div class="form-grid">
+                <label>
+                  Format
+                  <select id="documentType" required>
+                    <option value="book">Book</option>
+                    <option value="research-paper">Research Paper</option>
+                    <option value="topic-note">Topic Note</option>
+                  </select>
+                </label>
+
+                <label>
+                  Language
+                  <select id="language" required>
+                    <option value="english">English</option>
+                    <option value="hindi">Hindi</option>
+                  </select>
+                </label>
+
+                <label>
+                  Paper Size
+                  <input id="paperSize" type="text" readonly />
+                </label>
+
+                <label>
+                  Color Mode
+                  <select id="colorMode">
+                    <option value="standard">Standard</option>
+                    <option value="color">Color</option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="checkbox-row">
+                <input id="includeImages" type="checkbox" />
+                <span>Add image/figure suggestions in the generated file</span>
+              </label>
+
+              <button id="generateButton" class="primary-button" type="submit">
+                Generate Document
+              </button>
+            </form>
+
+            <section class="panel editor-panel">
+              <div class="panel-header">
+                <div>
+                  <h2 id="editorTitle">Generated Content</h2>
+                  <p id="editorMeta" class="muted">Login and generate a document to begin.</p>
+                </div>
+                <div class="action-row">
+                  <button id="saveButton" class="ghost-button inline-button" type="button" disabled>
+                    Save
+                  </button>
+                  <button id="unlockButton" class="primary-button inline-button" type="button" disabled>
+                    Pay & Unlock
+                  </button>
+                  <button id="downloadDocx" class="ghost-button inline-button" type="button" disabled>
+                    DOCX
+                  </button>
+                  <button id="downloadPdf" class="ghost-button inline-button" type="button" disabled>
+                    PDF
+                  </button>
+                </div>
+              </div>
+
+              <section class="billing-panel">
+                <div>
+                  <p class="mini-label">Total Price</p>
+                  <h3 id="pricingTotal">Rs 0.00</h3>
+                  <p id="pricingHint" class="muted">
+                    Token cost, trial-aware platform fee, and optional color image charge are shown here.
+                  </p>
+                </div>
+                <div class="billing-grid">
+                  <div>
+                    <p class="mini-label">Tokens</p>
+                    <strong id="tokenUsage">0</strong>
+                  </div>
+                  <div>
+                    <p class="mini-label">Pages</p>
+                    <strong id="pageEstimate">0</strong>
+                  </div>
+                  <div>
+                    <p class="mini-label">Paper Size</p>
+                    <strong id="paperSizeLabel">A4</strong>
+                  </div>
+                  <div>
+                    <p class="mini-label">Access</p>
+                    <strong id="accessState">Locked</strong>
+                  </div>
+                </div>
+              </section>
+
+              <div id="previewScroll" class="preview-scroll">
+                <div id="previewContainer" class="preview-container"></div>
+              </div>
+
+              <div id="lockCard" class="lock-card" hidden>
+                <p class="mini-label">Preview Limit Reached</p>
+                <h3>Unlock the full document before export</h3>
+                <p id="lockMessage" class="muted">
+                  Preview mode only shows the first part of the generated document.
+                </p>
+                <button id="lockAction" class="primary-button lock-button" type="button">
                   Pay & Unlock
                 </button>
-                <button id="downloadDocx" class="ghost-button" type="button" disabled>
-                  DOCX
-                </button>
-                <button id="downloadPdf" class="ghost-button" type="button" disabled>
-                  PDF
-                </button>
               </div>
-            </div>
 
-            <section class="billing-panel">
-              <div>
-                <p class="mini-label">Unlock Price</p>
-                <h3 id="pricingTotal">Rs 0.00</h3>
-                <p id="pricingHint" class="muted">
-                  Generate a draft to calculate token-based pricing.
-                </p>
-              </div>
-              <div class="billing-grid">
-                <div>
-                  <p class="mini-label">Tokens</p>
-                  <strong id="tokenUsage">0</strong>
-                </div>
-                <div>
-                  <p class="mini-label">Estimated Pages</p>
-                  <strong id="pageEstimate">0</strong>
-                </div>
-                <div>
-                  <p class="mini-label">Preview Limit</p>
-                  <strong id="previewLimit">3 pages</strong>
-                </div>
-                <div>
-                  <p class="mini-label">Access</p>
-                  <strong id="accessState">Locked</strong>
-                </div>
-              </div>
+              <textarea
+                id="contentEditor"
+                class="content-editor"
+                placeholder="Generated content appears here..."
+              ></textarea>
             </section>
-
-            <div id="previewScroll" class="preview-scroll">
-              <div id="previewContainer" class="preview-container"></div>
-            </div>
-
-            <div id="lockCard" class="lock-card" hidden>
-              <p class="mini-label">Preview Limit Reached</p>
-              <h3>Unlock the full AI book before download</h3>
-              <p id="lockMessage" class="muted">
-                Only the first 3 pages are visible in preview mode.
-              </p>
-              <button id="lockAction" class="primary-button lock-button" type="button">
-                Pay & Unlock
-              </button>
-            </div>
-
-            <div id="stickyUnlockBar" class="sticky-unlock-bar" hidden>
-              <div>
-                <strong id="stickyUnlockLabel">Unlock full book</strong>
-                <p id="stickyUnlockHint" class="muted">
-                  Pay to enable full preview and downloads.
-                </p>
-              </div>
-              <button id="stickyUnlockButton" class="primary-button inline-button" type="button">
-                Unlock Now
-              </button>
-            </div>
-
-            <div id="editorLockNotice" class="editor-lock-notice">
-              Full editor unlocks after payment so readers only see the 3-page preview.
-            </div>
-            <textarea
-              id="contentEditor"
-              class="content-editor"
-              placeholder="Generated content appears here..."
-            ></textarea>
           </section>
-        </section>
-      </main>
+        </main>
+      </section>
+    </div>
+
+    <div id="loaderOverlay" class="loader-overlay" hidden>
+      <div class="loader-card">
+        <div class="book-loader" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <h3 id="loaderTitle">Generating your document</h3>
+        <p id="loaderText" class="muted">
+          Building the structure, pages, and preview. This can take a little time.
+        </p>
+      </div>
     </div>
 
     <div id="toast" class="toast" hidden></div>
     <script src="/app.js"></script>
   </body>
-  </html>
+</html>

@@ -1,5 +1,6 @@
 const express = require("express");
 
+const { requireAuth } = require("./auth");
 const { generateWithConfiguredProvider } = require("../services/aiProviders");
 const {
   createProject,
@@ -9,16 +10,38 @@ const {
 } = require("../store/projectStore");
 const { createDocxBuffer, createPdfBuffer } = require("../utils/exporters");
 const { extractOutline } = require("../utils/markdown");
-const { createPaymentOrder, getPaymentConfig, verifyPaymentSignature } = require("../utils/payments");
-const { calculateProjectPricing, getPricingConfig, normalizeUsage } = require("../utils/pricing");
+const {
+  createPaymentOrder,
+  getPaymentConfig,
+  verifyPaymentSignature,
+} = require("../utils/payments");
+const {
+  calculateProjectPricing,
+  getDefaultPaperSize,
+  getPricingConfig,
+  isWithinFreeTrial,
+  normalizeUsage,
+} = require("../utils/pricing");
+const { sanitizeUser } = require("../utils/auth");
 
 const router = express.Router();
 
+router.use(requireAuth);
+
 function normalizeInput(body = {}) {
+  const documentType = String(body.documentType || body.bookType || "").trim().toLowerCase();
+  const language = String(body.language || "").trim().toLowerCase() || "english";
+  const includeImages = Boolean(body.includeImages);
+  const colorMode = String(body.colorMode || "").trim().toLowerCase() || "standard";
+
   return {
     topic: String(body.topic || "").trim(),
     description: String(body.description || "").trim(),
-    bookType: String(body.bookType || "").trim().toLowerCase(),
+    documentType,
+    language: language === "hindi" ? "hindi" : "english",
+    includeImages,
+    colorMode: includeImages && colorMode === "color" ? "color" : "standard",
+    paperSize: String(body.paperSize || "").trim() || getDefaultPaperSize(documentType),
   };
 }
 
@@ -29,11 +52,7 @@ function serializeProject(project) {
 
   const paymentStatus = project.payment?.status || "unpaid";
   const canUnlock = paymentStatus === "paid";
-  const pricing = project.pricing || calculateProjectPricing({
-    content: project.content || "",
-    usage: project.usage || {},
-  });
-  const previewContent = pricing.previewContent || "";
+  const previewContent = project.pricing?.previewContent || "";
 
   return {
     ...project,
@@ -48,15 +67,30 @@ function serializeProject(project) {
       orderId: project.payment?.orderId || "",
       paymentId: project.payment?.paymentId || "",
       paidAt: project.payment?.paidAt || null,
-      amountInr: project.payment?.amountInr || pricing.totalChargeInr,
+      amountInr: project.payment?.amountInr || project.pricing?.totalChargeInr || 0,
     },
+  };
+}
+
+function createProjectSummary(projects = [], user) {
+  const generatedDocuments = projects.length;
+  const paidDocuments = projects.filter((project) => project.payment?.status === "paid").length;
+
+  return {
+    generatedDocuments,
+    paidDocuments,
+    freeTrialActive:
+      typeof projects[0]?.pricing?.freeTrialActive === "boolean"
+        ? projects[0].pricing.freeTrialActive
+        : isWithinFreeTrial(user?.createdAt),
+    profile: sanitizeUser(user),
   };
 }
 
 async function loadProjectOr404(req, res) {
   const project = await getProjectById(req.params.id);
 
-  if (!project) {
+  if (!project || String(project.userId) !== String(req.user._id)) {
     res.status(404).json({ message: "Project not found." });
     return null;
   }
@@ -64,12 +98,17 @@ async function loadProjectOr404(req, res) {
   return project;
 }
 
-router.get("/", async (_req, res) => {
-  const projects = await listProjects();
-  res.json(projects.map(serializeProject));
+router.get("/", async (req, res) => {
+  const projects = await listProjects(String(req.user._id));
+  const serialized = projects.map(serializeProject);
+
+  res.json({
+    projects: serialized,
+    summary: createProjectSummary(serialized, req.user),
+  });
 });
 
-router.get("/config", async (_req, res) => {
+router.get("/config", async (req, res) => {
   const pricing = getPricingConfig();
   const payment = getPaymentConfig();
 
@@ -77,14 +116,31 @@ router.get("/config", async (_req, res) => {
     pricing: {
       currency: pricing.currency,
       platformFeeInr: pricing.platformFeeInr,
+      colorImageChargeInr: pricing.imageChargeInr,
       inputCostPer1kTokensInr: pricing.inputCostPer1kTokensInr,
       outputCostPer1kTokensInr: pricing.outputCostPer1kTokensInr,
       previewPageLimit: pricing.previewPageLimit,
       wordsPerPage: pricing.wordsPerPage,
+      freeTrialDays: pricing.freeTrialDays,
     },
     payment: {
       mode: payment.mode,
       razorpayKeyId: payment.razorpayKeyId,
+    },
+    options: {
+      languages: [
+        { value: "english", label: "English" },
+        { value: "hindi", label: "Hindi" },
+      ],
+      documentTypes: [
+        { value: "book", label: "Book", paperSize: getDefaultPaperSize("book") },
+        {
+          value: "research-paper",
+          label: "Research Paper",
+          paperSize: getDefaultPaperSize("research-paper"),
+        },
+        { value: "topic-note", label: "Topic Note", paperSize: getDefaultPaperSize("topic-note") },
+      ],
     },
   });
 });
@@ -93,9 +149,9 @@ router.post("/generate", async (req, res) => {
   try {
     const input = normalizeInput(req.body);
 
-    if (!input.topic || !input.bookType) {
+    if (!input.topic || !input.documentType) {
       return res.status(400).json({
-        message: "Topic and book type are required.",
+        message: "Topic and document type are required.",
       });
     }
 
@@ -105,10 +161,16 @@ router.post("/generate", async (req, res) => {
     const pricing = calculateProjectPricing({
       content: generated.content,
       usage,
+      userCreatedAt: req.user.createdAt,
+      includeImages: input.includeImages,
+      colorMode: input.colorMode,
+      documentType: input.documentType,
     });
 
     const project = await createProject({
       ...input,
+      userId: String(req.user._id),
+      paperSize: input.paperSize || pricing.paperSize,
       provider: generated.provider,
       outline,
       content: generated.content,
@@ -142,20 +204,32 @@ router.put("/:id", async (req, res) => {
 
     if (currentProject.payment?.status !== "paid") {
       return res.status(403).json({
-        message: "Unlock the book before editing the full content.",
+        message: "Unlock the document before editing the full content.",
       });
     }
 
+    const input = normalizeInput({
+      ...currentProject,
+      ...req.body,
+    });
     const content = String(req.body.content || "");
     const pricing = calculateProjectPricing({
       content,
       usage: currentProject.usage || {},
+      userCreatedAt: req.user.createdAt,
+      includeImages: input.includeImages,
+      colorMode: input.colorMode,
+      documentType: input.documentType,
     });
 
     const updates = {
-      topic: String(req.body.topic || "").trim(),
-      description: String(req.body.description || "").trim(),
-      bookType: String(req.body.bookType || "").trim().toLowerCase(),
+      topic: input.topic,
+      description: input.description,
+      documentType: input.documentType,
+      language: input.language,
+      paperSize: input.paperSize || pricing.paperSize,
+      includeImages: input.includeImages,
+      colorMode: input.colorMode,
       content,
       outline: extractOutline(content),
       usage: currentProject.usage || {},
@@ -163,11 +237,6 @@ router.put("/:id", async (req, res) => {
         ...pricing,
         tokenCostInr: currentProject.pricing?.tokenCostInr || pricing.tokenCostInr,
         totalChargeInr: currentProject.pricing?.totalChargeInr || pricing.totalChargeInr,
-        platformFeeInr: currentProject.pricing?.platformFeeInr || pricing.platformFeeInr,
-        inputCostPer1kTokensInr:
-          currentProject.pricing?.inputCostPer1kTokensInr || pricing.inputCostPer1kTokensInr,
-        outputCostPer1kTokensInr:
-          currentProject.pricing?.outputCostPer1kTokensInr || pricing.outputCostPer1kTokensInr,
       },
       payment: currentProject.payment,
     };
@@ -295,13 +364,15 @@ router.get("/:id/export/:kind", async (req, res) => {
 
     if (project.payment?.status !== "paid") {
       return res.status(402).json({
-        message: "Pay and unlock the book before downloading exports.",
+        message: "Pay and unlock the document before downloading exports.",
         pricing: project.pricing,
       });
     }
 
     const kind = String(req.params.kind || "").toLowerCase();
-    const fileName = `${project.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "book"}.${kind}`;
+    const fileBase =
+      project.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "document";
+    const fileName = `${fileBase}.${kind}`;
 
     if (kind === "docx") {
       const buffer = await createDocxBuffer(project.content);
@@ -314,7 +385,9 @@ router.get("/:id/export/:kind", async (req, res) => {
     }
 
     if (kind === "pdf") {
-      const buffer = await createPdfBuffer(project.content);
+      const buffer = await createPdfBuffer(project.content, {
+        paperSize: project.paperSize || "A4",
+      });
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
       return res.send(buffer);
