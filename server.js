@@ -11,6 +11,40 @@ dotenv.config();
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
+function getAllowedOrigins() {
+  return String(process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+app.use((req, res, next) => {
+  const origin = String(req.headers.origin || "");
+  const allowedOrigins = getAllowedOrigins();
+  const allowAnyOrigin = allowedOrigins.includes("*");
+
+  if (allowAnyOrigin && origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  if (origin && (allowAnyOrigin || allowedOrigins.includes(origin))) {
+    res.setHeader("Vary", "Origin");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Requested-With"
+    );
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  }
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  return next();
+});
+
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 
