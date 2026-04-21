@@ -14,156 +14,47 @@
   </head>
   <body>
     <div class="page-shell">
-      <section id="authView" class="auth-shell">
-        <div class="auth-hero">
-          <p class="eyebrow">AI Writing Workspace</p>
-          <h1>BookForge</h1>
-          <p class="muted">
-            Create books, research papers, and topic notes in Hindi or English with
-            profile-based history, pricing, and exports.
-          </p>
-        </div>
-
-        <div class="auth-cards">
-          <form id="loginForm" class="panel auth-panel">
-            <div class="panel-header">
-              <h2>Login</h2>
-            </div>
-
-            <label>
-              Email
-              <input id="loginEmail" type="email" required />
-            </label>
-
-            <label>
-              Password
-              <input id="loginPassword" type="password" required />
-            </label>
-
-            <button class="primary-button" type="submit">Login</button>
-          </form>
-
-          <form id="registerForm" class="panel auth-panel">
-            <div class="panel-header">
-              <h2>Register</h2>
-            </div>
-
-            <label>
-              Name
-              <input id="registerName" type="text" required />
-            </label>
-
-            <label>
-              Mobile Number
-              <input id="registerMobile" type="tel" required />
-            </label>
-
-            <label>
-              Email
-              <input id="registerEmail" type="email" required />
-            </label>
-
-            <label>
-              Address
-              <textarea id="registerAddress" rows="3" required></textarea>
-            </label>
-
-            <label>
-              Qualification
-              <input id="registerQualification" type="text" />
-            </label>
-
-            <label>
-              Password
-              <input id="registerPassword" type="password" required />
-            </label>
-
-            <button class="primary-button" type="submit">Create Account</button>
-          </form>
-        </div>
-      </section>
-
-      <section id="appView" class="app-shell" hidden>
-        <aside class="sidebar">
-          <div class="brand-block">
-            <p class="eyebrow">Customer Workspace</p>
+      <header class="topbar">
+        <div class="brand-row">
+          <div class="brand-mark">BF</div>
+          <div>
+            <p class="eyebrow">AI Writing Workspace</p>
             <h1>BookForge</h1>
-            <p class="muted">
-              Generate structured documents, track usage history, and manage profile details.
-            </p>
           </div>
+        </div>
 
-          <section class="panel profile-panel">
-            <div class="panel-header">
-              <h2>Profile</h2>
-              <button id="logoutButton" class="ghost-button inline-button" type="button">
-                Logout
-              </button>
-            </div>
+        <nav class="top-actions">
+          <button id="navWorkspace" class="nav-link active" type="button">Workspace</button>
+          <button id="navAccount" class="nav-link" type="button">Profile & History</button>
+          <div id="guestActions" class="nav-group">
+            <button id="openLoginButton" class="ghost-button inline-button" type="button">
+              Login
+            </button>
+          </div>
+          <div id="userActions" class="nav-group" hidden>
+            <div id="userBadge" class="user-badge">Guest</div>
+            <button id="topLogoutButton" class="ghost-button inline-button" type="button">
+              Logout
+            </button>
+          </div>
+        </nav>
+      </header>
 
-            <form id="profileForm">
-              <label>
-                Name
-                <input id="profileName" type="text" required />
-              </label>
-
-              <label>
-                Mobile Number
-                <input id="profileMobile" type="tel" required />
-              </label>
-
-              <label>
-                Email
-                <input id="profileEmail" type="email" required />
-              </label>
-
-              <label>
-                Qualification
-                <input id="profileQualification" type="text" />
-              </label>
-
-              <label>
-                Address
-                <textarea id="profileAddress" rows="3" required></textarea>
-              </label>
-
-              <button id="saveProfileButton" class="ghost-button" type="submit">
-                Save Profile
-              </button>
-            </form>
-          </section>
-
-          <section class="panel history-panel">
-            <div class="panel-header">
-              <h2>History</h2>
-              <button id="refreshProjects" class="ghost-button inline-button" type="button">
-                Refresh
-              </button>
-            </div>
-            <div class="history-grid">
-              <div>
-                <p class="mini-label">Generated</p>
-                <strong id="historyGenerated">0</strong>
-              </div>
-              <div>
-                <p class="mini-label">Unlocked</p>
-                <strong id="historyUnlocked">0</strong>
-              </div>
-            </div>
-            <div id="projectList" class="project-list"></div>
-          </section>
-        </aside>
-
-        <main class="main-content">
-          <section class="hero-card">
+      <main class="main-shell">
+        <section id="workspaceView" class="view-section">
+          <section class="hero-card hero-grid">
             <div>
               <p class="eyebrow">Smart Generator</p>
-              <h2>Create a book, research paper, or topic note with the right structure</h2>
+              <h2>Create books, research papers, and topic notes in a cleaner flow</h2>
+              <p class="muted hero-copy">
+                Fill the form, choose language and format, and generate a structured document.
+                If a user clicks Generate without login, we now open authentication immediately.
+              </p>
             </div>
             <div class="hero-status">
               <div class="status-chip" id="providerBadge">Provider: loading...</div>
               <div class="status-chip" id="paymentBadge">Payments: loading...</div>
-              <div class="status-chip" id="trialBadge">Free Trial: loading...</div>
+              <div class="status-chip" id="trialBadge">Free Trial: login required</div>
             </div>
           </section>
 
@@ -171,6 +62,7 @@
             <form id="generatorForm" class="panel form-panel">
               <div class="panel-header">
                 <h2>New Document</h2>
+                <div class="mini-banner">Color + images adds extra charge</div>
               </div>
 
               <label>
@@ -226,8 +118,16 @@
 
               <label class="checkbox-row">
                 <input id="includeImages" type="checkbox" />
-                <span>Add image/figure suggestions in the generated file</span>
+                <span>Add image and figure suggestions to this document</span>
               </label>
+
+              <div class="helper-card">
+                <strong>Login rule</strong>
+                <p class="muted">
+                  Users can explore the form freely. Authentication is required only when they click
+                  Generate, Save, Unlock, or Download.
+                </p>
+              </div>
 
               <button id="generateButton" class="primary-button" type="submit">
                 Generate Document
@@ -238,7 +138,9 @@
               <div class="panel-header">
                 <div>
                   <h2 id="editorTitle">Generated Content</h2>
-                  <p id="editorMeta" class="muted">Login and generate a document to begin.</p>
+                  <p id="editorMeta" class="muted">
+                    Generate a document to preview it here.
+                  </p>
                 </div>
                 <div class="action-row">
                   <button id="saveButton" class="ghost-button inline-button" type="button" disabled>
@@ -261,7 +163,7 @@
                   <p class="mini-label">Total Price</p>
                   <h3 id="pricingTotal">Rs 0.00</h3>
                   <p id="pricingHint" class="muted">
-                    Token cost, trial-aware platform fee, and optional color image charge are shown here.
+                    Token cost, platform fee, and optional image/color charge will be shown here.
                   </p>
                 </div>
                 <div class="billing-grid">
@@ -285,7 +187,19 @@
               </section>
 
               <div id="previewScroll" class="preview-scroll">
-                <div id="previewContainer" class="preview-container"></div>
+                <div id="previewContainer" class="preview-container">
+                  <article class="preview-page preview-empty">
+                    <div class="preview-page-header">
+                      <span>Preview</span>
+                      <span>Waiting</span>
+                    </div>
+                    <h2>Document preview will appear here</h2>
+                    <p>
+                      Use the generator on the left. If the customer is not logged in, the Generate
+                      button will open the login popup first.
+                    </p>
+                  </article>
+                </div>
               </div>
 
               <div id="lockCard" class="lock-card" hidden>
@@ -306,8 +220,159 @@
               ></textarea>
             </section>
           </section>
-        </main>
-      </section>
+        </section>
+
+        <section id="accountView" class="view-section" hidden>
+          <section class="hero-card account-hero">
+            <div>
+              <p class="eyebrow">Customer Account</p>
+              <h2>Profile and generation history</h2>
+              <p class="muted hero-copy">
+                Keep customer details updated and review all generated documents from one place.
+              </p>
+            </div>
+            <button id="refreshProjects" class="ghost-button inline-button" type="button">
+              Refresh History
+            </button>
+          </section>
+
+          <section class="account-grid">
+            <section class="panel profile-panel">
+              <div class="panel-header">
+                <h2>Profile</h2>
+              </div>
+
+              <form id="profileForm">
+                <label>
+                  Name
+                  <input id="profileName" type="text" required />
+                </label>
+
+                <label>
+                  Mobile Number
+                  <input id="profileMobile" type="tel" required />
+                </label>
+
+                <label>
+                  Email
+                  <input id="profileEmail" type="email" required />
+                </label>
+
+                <label>
+                  Qualification
+                  <input id="profileQualification" type="text" />
+                </label>
+
+                <label>
+                  Address
+                  <textarea id="profileAddress" rows="3" required></textarea>
+                </label>
+
+                <button id="saveProfileButton" class="primary-button" type="submit">
+                  Save Profile
+                </button>
+              </form>
+            </section>
+
+            <section class="panel history-panel">
+              <div class="panel-header">
+                <h2>Document History</h2>
+              </div>
+
+              <div class="history-grid">
+                <div>
+                  <p class="mini-label">Generated</p>
+                  <strong id="historyGenerated">0</strong>
+                </div>
+                <div>
+                  <p class="mini-label">Unlocked</p>
+                  <strong id="historyUnlocked">0</strong>
+                </div>
+              </div>
+
+              <div id="projectList" class="project-list"></div>
+            </section>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="authModal" class="auth-modal" hidden>
+      <div id="authBackdrop" class="auth-backdrop"></div>
+      <div class="auth-dialog">
+        <button id="closeAuthModal" class="close-button" type="button" aria-label="Close">
+          ×
+        </button>
+
+        <div class="auth-dialog-header">
+          <p class="eyebrow">Continue To Generate</p>
+          <h2 id="authModalTitle">Login to continue</h2>
+          <p class="muted">
+            Existing users can login here. New users can create an account from the link below.
+          </p>
+        </div>
+
+        <div class="auth-switcher">
+          <button id="showLoginTab" class="nav-link active" type="button">Login</button>
+          <button id="showRegisterTab" class="nav-link" type="button">Create Account</button>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <label>
+            Email
+            <input id="loginEmail" type="email" required />
+          </label>
+
+          <label>
+            Password
+            <input id="loginPassword" type="password" required />
+          </label>
+
+          <button class="primary-button" type="submit">Login</button>
+          <p class="auth-footer">
+            New user?
+            <button id="openRegisterLink" class="text-link" type="button">Create account</button>
+          </p>
+        </form>
+
+        <form id="registerForm" class="auth-form" hidden>
+          <label>
+            Name
+            <input id="registerName" type="text" required />
+          </label>
+
+          <label>
+            Mobile Number
+            <input id="registerMobile" type="tel" required />
+          </label>
+
+          <label>
+            Email
+            <input id="registerEmail" type="email" required />
+          </label>
+
+          <label>
+            Address
+            <textarea id="registerAddress" rows="3" required></textarea>
+          </label>
+
+          <label>
+            Qualification
+            <input id="registerQualification" type="text" />
+          </label>
+
+          <label>
+            Password
+            <input id="registerPassword" type="password" required />
+          </label>
+
+          <button class="primary-button" type="submit">Create Account</button>
+          <p class="auth-footer">
+            Already registered?
+            <button id="openLoginLink" class="text-link" type="button">Login here</button>
+          </p>
+        </form>
+      </div>
     </div>
 
     <div id="loaderOverlay" class="loader-overlay" hidden>

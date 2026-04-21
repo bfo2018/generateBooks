@@ -7,15 +7,32 @@ const state = {
   pricingConfig: null,
   projects: [],
   selectedProjectId: null,
+  currentView: "workspace",
+  authMode: "login",
+  pendingGenerate: false,
 };
 
 const elements = {
-  authView: document.getElementById("authView"),
-  appView: document.getElementById("appView"),
+  workspaceView: document.getElementById("workspaceView"),
+  accountView: document.getElementById("accountView"),
+  navWorkspace: document.getElementById("navWorkspace"),
+  navAccount: document.getElementById("navAccount"),
+  guestActions: document.getElementById("guestActions"),
+  userActions: document.getElementById("userActions"),
+  userBadge: document.getElementById("userBadge"),
+  openLoginButton: document.getElementById("openLoginButton"),
+  topLogoutButton: document.getElementById("topLogoutButton"),
+  authModal: document.getElementById("authModal"),
+  authBackdrop: document.getElementById("authBackdrop"),
+  closeAuthModal: document.getElementById("closeAuthModal"),
+  authModalTitle: document.getElementById("authModalTitle"),
+  showLoginTab: document.getElementById("showLoginTab"),
+  showRegisterTab: document.getElementById("showRegisterTab"),
+  openRegisterLink: document.getElementById("openRegisterLink"),
+  openLoginLink: document.getElementById("openLoginLink"),
   loginForm: document.getElementById("loginForm"),
   registerForm: document.getElementById("registerForm"),
   profileForm: document.getElementById("profileForm"),
-  logoutButton: document.getElementById("logoutButton"),
   generatorForm: document.getElementById("generatorForm"),
   generateButton: document.getElementById("generateButton"),
   refreshProjects: document.getElementById("refreshProjects"),
@@ -115,6 +132,7 @@ async function api(url, options = {}) {
     if (response.status === 401 && state.token) {
       clearSession();
       renderShell();
+      openAuthModal("login");
     }
 
     throw new Error(data.message || "Request failed.");
@@ -199,10 +217,44 @@ function renderPageItem(item) {
   return `<p>${escapeHtml(item.text)}</p>`;
 }
 
+function isLoggedIn() {
+  return Boolean(state.token && state.user);
+}
+
+function setAuthMode(mode) {
+  state.authMode = mode;
+  const loginActive = mode === "login";
+  elements.loginForm.hidden = !loginActive;
+  elements.registerForm.hidden = loginActive;
+  elements.showLoginTab.classList.toggle("active", loginActive);
+  elements.showRegisterTab.classList.toggle("active", !loginActive);
+  elements.authModalTitle.textContent = loginActive ? "Login to continue" : "Create your account";
+}
+
+function openAuthModal(mode = "login") {
+  setAuthMode(mode);
+  elements.authModal.hidden = false;
+}
+
+function closeAuthModal() {
+  elements.authModal.hidden = true;
+}
+
 function renderShell() {
-  const isLoggedIn = Boolean(state.token && state.user);
-  elements.authView.hidden = isLoggedIn;
-  elements.appView.hidden = !isLoggedIn;
+  const loggedIn = isLoggedIn();
+  elements.guestActions.hidden = loggedIn;
+  elements.userActions.hidden = !loggedIn;
+  elements.navAccount.hidden = !loggedIn;
+  elements.userBadge.textContent = loggedIn ? state.user.name || state.user.email : "Guest";
+
+  if (!loggedIn && state.currentView === "account") {
+    state.currentView = "workspace";
+  }
+
+  elements.workspaceView.hidden = state.currentView !== "workspace";
+  elements.accountView.hidden = state.currentView !== "account";
+  elements.navWorkspace.classList.toggle("active", state.currentView === "workspace");
+  elements.navAccount.classList.toggle("active", state.currentView === "account");
 }
 
 function populateProfile() {
@@ -220,18 +272,25 @@ function updateActionButtons() {
   const project = getSelectedProject();
   const isPaid = project?.payment?.status === "paid";
   const hasProject = Boolean(project);
+  const loggedIn = isLoggedIn();
 
-  elements.saveButton.disabled = !isPaid;
-  elements.unlockButton.disabled = !hasProject || isPaid;
-  elements.downloadDocx.disabled = !isPaid;
-  elements.downloadPdf.disabled = !isPaid;
-  elements.lockAction.disabled = !hasProject || isPaid;
+  elements.saveButton.disabled = !loggedIn || !isPaid;
+  elements.unlockButton.disabled = !loggedIn || !hasProject || isPaid;
+  elements.downloadDocx.disabled = !loggedIn || !isPaid;
+  elements.downloadPdf.disabled = !loggedIn || !isPaid;
+  elements.lockAction.disabled = !loggedIn || !hasProject || isPaid;
 }
 
 function renderProjects() {
+  if (!isLoggedIn()) {
+    elements.projectList.innerHTML =
+      '<p class="muted">Login to see customer history and generated documents.</p>';
+    return;
+  }
+
   if (!state.projects.length) {
     elements.projectList.innerHTML =
-      '<p class="muted">No documents generated yet. Create the first one from the form.</p>';
+      '<p class="muted">No documents generated yet. Create the first one from the workspace.</p>';
     return;
   }
 
@@ -252,16 +311,22 @@ function renderProjects() {
     .join("");
 
   document.querySelectorAll(".project-card").forEach((button) => {
-    button.addEventListener("click", () => selectProject(button.dataset.id));
+    button.addEventListener("click", () => {
+      state.currentView = "workspace";
+      renderShell();
+      selectProject(button.dataset.id);
+    });
   });
 }
 
 function renderSummary(summary) {
   elements.historyGenerated.textContent = String(summary?.generatedDocuments || 0);
   elements.historyUnlocked.textContent = String(summary?.paidDocuments || 0);
-  elements.trialBadge.textContent = summary?.freeTrialActive
-    ? "Free Trial: active"
-    : "Free Trial: platform fee applies";
+  elements.trialBadge.textContent = isLoggedIn()
+    ? summary?.freeTrialActive
+      ? "Free Trial: active"
+      : "Free Trial: platform fee applies"
+    : "Free Trial: login required";
 }
 
 function renderPricing(project) {
@@ -283,7 +348,16 @@ function renderPricing(project) {
 
 function renderPreview(project) {
   if (!project) {
-    elements.previewContainer.innerHTML = "";
+    elements.previewContainer.innerHTML = `
+      <article class="preview-page preview-empty">
+        <div class="preview-page-header">
+          <span>Preview</span>
+          <span>Waiting</span>
+        </div>
+        <h2>Document preview will appear here</h2>
+        <p>Generate a document from the workspace form to see a live preview.</p>
+      </article>
+    `;
     elements.lockCard.hidden = true;
     return;
   }
@@ -364,6 +438,11 @@ async function loadHealth() {
 }
 
 async function loadConfig() {
+  if (!isLoggedIn()) {
+    elements.paymentBadge.textContent = "Payments: login required";
+    return;
+  }
+
   const data = await api("/api/projects/config");
   state.pricingConfig = data.pricing;
   state.paymentMode = data.payment.mode;
@@ -378,6 +457,18 @@ async function loadProfile() {
 }
 
 async function loadProjects() {
+  if (!isLoggedIn()) {
+    state.projects = [];
+    state.selectedProjectId = null;
+    renderSummary({});
+    renderProjects();
+    renderPreview(null);
+    renderPricing(null);
+    renderEditor(null);
+    updateActionButtons();
+    return;
+  }
+
   const data = await api("/api/projects");
   state.projects = data.projects || [];
   renderSummary(data.summary || {});
@@ -385,7 +476,7 @@ async function loadProjects() {
   if (!state.projects.length) {
     state.selectedProjectId = null;
     elements.editorTitle.textContent = "Generated Content";
-    elements.editorMeta.textContent = "Select or generate a document to start editing.";
+    elements.editorMeta.textContent = "Generate a document to start editing.";
     renderPricing(null);
     renderPreview(null);
     renderEditor(null);
@@ -403,9 +494,9 @@ async function loadProjects() {
 }
 
 async function bootAuthenticatedApp() {
-  renderShell();
   await Promise.all([loadProfile(), loadHealth(), loadConfig()]);
   await loadProjects();
+  renderShell();
 }
 
 async function handleLogin(event) {
@@ -423,8 +514,14 @@ async function handleLogin(event) {
 
     saveSession(data.token, data.user);
     await bootAuthenticatedApp();
+    closeAuthModal();
     showToast("Logged in successfully.");
     elements.loginForm.reset();
+
+    if (state.pendingGenerate) {
+      state.pendingGenerate = false;
+      elements.generatorForm.requestSubmit();
+    }
   } catch (error) {
     showToast(error.message);
   }
@@ -449,8 +546,14 @@ async function handleRegister(event) {
 
     saveSession(data.token, data.user);
     await bootAuthenticatedApp();
+    closeAuthModal();
     showToast("Account created successfully.");
     elements.registerForm.reset();
+
+    if (state.pendingGenerate) {
+      state.pendingGenerate = false;
+      elements.generatorForm.requestSubmit();
+    }
   } catch (error) {
     showToast(error.message);
   }
@@ -473,6 +576,7 @@ async function handleProfileSave(event) {
 
     state.user = data.user;
     populateProfile();
+    renderShell();
     showToast("Profile updated.");
   } catch (error) {
     showToast(error.message);
@@ -487,12 +591,41 @@ async function handleLogout() {
   }
 
   clearSession();
+  state.currentView = "workspace";
   renderShell();
+  await loadHealth().catch(() => {
+    elements.providerBadge.textContent = "Provider: unavailable";
+  });
+  elements.paymentBadge.textContent = "Payments: login required";
+  elements.trialBadge.textContent = "Free Trial: login required";
+  renderProjects();
+  renderPreview(null);
+  renderPricing(null);
+  renderEditor(null);
+  updateActionButtons();
   showToast("Logged out.");
+}
+
+function requireLoginForAction(message) {
+  if (isLoggedIn()) {
+    return true;
+  }
+
+  if (message) {
+    showToast(message);
+  }
+  openAuthModal("login");
+  return false;
 }
 
 async function handleGenerate(event) {
   event.preventDefault();
+
+  if (!requireLoginForAction("Please login before generating a document.")) {
+    state.pendingGenerate = true;
+    return;
+  }
+
   elements.generateButton.disabled = true;
   setLoader(true, "Generating your document", "Creating content, preview pages, and pricing details.");
 
@@ -525,6 +658,10 @@ async function handleGenerate(event) {
 }
 
 async function handleSave() {
+  if (!requireLoginForAction("Please login before saving.")) {
+    return;
+  }
+
   const project = getSelectedProject();
   if (!project || project.payment?.status !== "paid") return;
 
@@ -629,6 +766,10 @@ async function unlockProject(projectId) {
 }
 
 async function handleUnlock() {
+  if (!requireLoginForAction("Please login before unlocking.")) {
+    return;
+  }
+
   const project = getSelectedProject();
   if (!project) return;
 
@@ -645,6 +786,10 @@ async function handleUnlock() {
 }
 
 async function handleDownload(kind) {
+  if (!requireLoginForAction("Please login before downloading.")) {
+    return;
+  }
+
   const project = getSelectedProject();
   if (!project) return;
 
@@ -663,11 +808,25 @@ function handleDocumentTypeChange() {
   elements.paperSize.value = getPaperSizeForType(elements.documentType.value);
 }
 
+function showWorkspaceView() {
+  state.currentView = "workspace";
+  renderShell();
+}
+
+function showAccountView() {
+  if (!requireLoginForAction("Please login to open profile and history.")) {
+    return;
+  }
+
+  state.currentView = "account";
+  renderShell();
+}
+
 function bindEvents() {
   elements.loginForm.addEventListener("submit", handleLogin);
   elements.registerForm.addEventListener("submit", handleRegister);
   elements.profileForm.addEventListener("submit", handleProfileSave);
-  elements.logoutButton.addEventListener("click", handleLogout);
+  elements.topLogoutButton.addEventListener("click", handleLogout);
   elements.refreshProjects.addEventListener("click", loadProjects);
   elements.generatorForm.addEventListener("submit", handleGenerate);
   elements.saveButton.addEventListener("click", handleSave);
@@ -676,11 +835,24 @@ function bindEvents() {
   elements.downloadDocx.addEventListener("click", () => handleDownload("docx"));
   elements.downloadPdf.addEventListener("click", () => handleDownload("pdf"));
   elements.documentType.addEventListener("change", handleDocumentTypeChange);
+  elements.navWorkspace.addEventListener("click", showWorkspaceView);
+  elements.navAccount.addEventListener("click", showAccountView);
+  elements.openLoginButton.addEventListener("click", () => openAuthModal("login"));
+  elements.closeAuthModal.addEventListener("click", closeAuthModal);
+  elements.authBackdrop.addEventListener("click", closeAuthModal);
+  elements.showLoginTab.addEventListener("click", () => setAuthMode("login"));
+  elements.showRegisterTab.addEventListener("click", () => setAuthMode("register"));
+  elements.openRegisterLink.addEventListener("click", () => setAuthMode("register"));
+  elements.openLoginLink.addEventListener("click", () => setAuthMode("login"));
 }
 
 async function init() {
   bindEvents();
   handleDocumentTypeChange();
+  renderShell();
+  renderProjects();
+  renderPreview(null);
+  updateActionButtons();
 
   try {
     await loadHealth();
@@ -689,7 +861,8 @@ async function init() {
   }
 
   if (!state.token) {
-    renderShell();
+    elements.paymentBadge.textContent = "Payments: login required";
+    elements.trialBadge.textContent = "Free Trial: login required";
     return;
   }
 
@@ -698,6 +871,8 @@ async function init() {
   } catch (_error) {
     clearSession();
     renderShell();
+    elements.paymentBadge.textContent = "Payments: login required";
+    elements.trialBadge.textContent = "Free Trial: login required";
   }
 }
 
