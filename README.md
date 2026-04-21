@@ -41,6 +41,7 @@ cp .env.example .env
 
 3. Update `.env`:
 
+- Set `API_BASE_URL` only when your frontend should call a separate backend domain. Example: `https://your-api.example.com`
 - Set `MONGODB_URI` to your MongoDB connection string
 - Leave `STORAGE_MODE=mongo` for normal use, or switch to `STORAGE_MODE=memory` for a quick local demo without MongoDB
 - Set `AI_PROVIDER=mock` for local testing without an API
@@ -71,6 +72,7 @@ npm run dev
 ## Notes
 
 - The frontend never sees your API key.
+- `API_BASE_URL` lets the browser app call a separately deployed backend instead of the same origin.
 - Razorpay checkout only needs the public key on the client; signature verification stays on the server with `RAZORPAY_KEY_SECRET`.
 - The AI integration is intentionally configurable because provider availability and endpoints can change.
 - `mock` mode generates a structured sample draft so the app remains usable before API setup.

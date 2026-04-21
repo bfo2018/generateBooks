@@ -12,6 +12,9 @@ const state = {
   authReady: false,
 };
 
+const appConfig = window.APP_CONFIG || {};
+const apiBaseUrl = String(appConfig.apiBaseUrl || "").trim().replace(/\/+$/, "");
+
 const elements = {
   workspaceView: document.getElementById("workspaceView"),
   accountView: document.getElementById("accountView"),
@@ -103,6 +106,14 @@ function showToast(message) {
   }, 2800);
 }
 
+function buildApiUrl(path) {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  return apiBaseUrl ? `${apiBaseUrl}${path}` : path;
+}
+
 function setLoader(visible, title, text) {
   elements.loaderOverlay.hidden = !visible;
   if (title) elements.loaderTitle.textContent = title;
@@ -119,7 +130,7 @@ async function api(url, options = {}) {
     headers.Authorization = `Bearer ${state.token}`;
   }
 
-  const response = await fetch(url, {
+  const response = await fetch(buildApiUrl(url), {
     ...options,
     headers,
   });
@@ -142,7 +153,7 @@ async function api(url, options = {}) {
 }
 
 async function downloadFile(url, filename) {
-  const response = await fetch(url, {
+  const response = await fetch(buildApiUrl(url), {
     headers: {
       Authorization: `Bearer ${state.token}`,
     },

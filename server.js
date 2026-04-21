@@ -13,6 +13,14 @@ const port = Number(process.env.PORT || 3000);
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+app.get("/app-config.js", (_req, res) => {
+  const apiBaseUrl = String(process.env.API_BASE_URL || "").trim().replace(/\/+$/, "");
+
+  res.type("application/javascript");
+  res.send(`window.APP_CONFIG = ${JSON.stringify({ apiBaseUrl })};`);
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/api/health", (_req, res) => {
