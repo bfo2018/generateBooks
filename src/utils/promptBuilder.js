@@ -72,7 +72,7 @@ function buildBookPrompt({
 }) {
   const blueprint = getDocumentBlueprint(documentType);
   const imageInstruction = includeImages
-    ? `Also include short figure suggestions and image captions suitable for a ${colorMode} file.`
+    ? `Also include short figure suggestions and image captions suitable for a ${colorMode} file. Add at least one Markdown image placeholder in this exact pattern: ![Figure 1: short visual description](generated-image://figure-1)`
     : "Do not include image prompts or figure captions.";
 
   return `

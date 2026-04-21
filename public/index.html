@@ -48,13 +48,13 @@
               <h2>Create books, research papers, and topic notes in a cleaner flow</h2>
               <p class="muted hero-copy">
                 Fill the form, choose language and format, and generate a structured document.
-                If a user clicks Generate without login, we now open authentication immediately.
+                Login is requested only when the user actually tries to generate or unlock.
               </p>
             </div>
             <div class="hero-status">
-              <div class="status-chip" id="providerBadge">Provider: loading...</div>
-              <div class="status-chip" id="paymentBadge">Payments: loading...</div>
-              <div class="status-chip" id="trialBadge">Free Trial: login required</div>
+              <div class="status-chip" id="providerBadge">AI: loading...</div>
+              <div class="status-chip" id="paymentBadge">Pay: loading...</div>
+              <div class="status-chip" id="trialBadge">Trial: login required</div>
             </div>
           </section>
 
@@ -121,13 +121,9 @@
                 <span>Add image and figure suggestions to this document</span>
               </label>
 
-              <div class="helper-card">
-                <strong>Login rule</strong>
-                <p class="muted">
-                  Users can explore the form freely. Authentication is required only when they click
-                  Generate, Save, Unlock, or Download.
-                </p>
-              </div>
+              <p class="inline-helper muted">
+                If the customer is not logged in, this button opens login first.
+              </p>
 
               <button id="generateButton" class="primary-button" type="submit">
                 Generate Document

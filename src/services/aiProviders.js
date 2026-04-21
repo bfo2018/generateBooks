@@ -92,8 +92,14 @@ function buildMockBook({ topic, description, documentType, language, includeImag
 
   const imageBlock = includeImages
     ? isHindi
-      ? `## चित्र सुझाव\n### चित्र 1\n${topic} के लिए एक ${colorMode === "color" ? "रंगीन" : "सरल"} व्याख्यात्मक चित्र का सुझाव।`
-      : `## Figure Suggestions\n### Figure 1\nSuggested ${colorMode === "color" ? "color" : "standard"} explanatory visual for ${topic}.`
+      ? `## चित्र सुझाव\n### चित्र 1\n${topic} के लिए एक ${colorMode === "color" ? "रंगीन" : "सरल"} व्याख्यात्मक चित्र का सुझाव।\n![चित्र 1: ${topic} का ${colorMode === "color" ? "रंगीन" : "मानक"} विज़ुअल](generated-image://figure-1)`
+      : `## Figure Suggestions\n### Figure 1\nSuggested ${colorMode === "color" ? "color" : "standard"} explanatory visual for ${topic}.\n![Figure 1: ${topic} visual concept](generated-image://figure-1)`
+    : "";
+
+  const fallbackImagePlaceholder = includeImages
+    ? isHindi
+      ? `\n\n## चित्र प्लेसहोल्डर\n![चित्र 1: ${topic} के लिए विवरणात्मक चित्र](generated-image://figure-1)`
+      : `\n\n## Image Placeholder\n![Figure 1: descriptive visual for ${topic}](generated-image://figure-1)`
     : "";
 
   if (documentType === "research-paper") {
@@ -122,7 +128,7 @@ ${topic} के महत्व, दायरे और संदर्भ क�
 - संदर्भ 1
 - संदर्भ 2
 
-${imageBlock}`.trim()
+${imageBlock || fallbackImagePlaceholder}`.trim()
       : `# ${topic}: Research Paper Draft
 
 ## Abstract
@@ -147,7 +153,7 @@ Summarize the key outcome and suggest future work.
 - Reference 1
 - Reference 2
 
-${imageBlock}`.trim();
+${imageBlock || fallbackImagePlaceholder}`.trim();
   }
 
   if (documentType === "topic-note") {
@@ -173,7 +179,7 @@ ${descriptionLine}
 - दोहराने योग्य सारांश
 - परीक्षा/इंटरव्यू के लिए मुख्य बातें
 
-${imageBlock}`.trim()
+${imageBlock || fallbackImagePlaceholder}`.trim()
       : `# ${topic}: Topic Notes
 
 ## Overview
@@ -195,7 +201,7 @@ Short examples and practical cues.
 - Fast recap
 - Interview/exam ready pointers
 
-${imageBlock}`.trim();
+${imageBlock || fallbackImagePlaceholder}`.trim();
   }
 
   return isHindi
@@ -271,7 +277,7 @@ ${descriptionLine}
 ## Summary
 यह मसौदा आगे संपादन, विस्तार और निर्यात के लिए तैयार है।
 
-${imageBlock}`.trim()
+${imageBlock || fallbackImagePlaceholder}`.trim()
     : `# ${topic}: Generated Book
 
 ## Outline
@@ -344,7 +350,25 @@ Recommend the next stage of study or implementation.
 ## Summary
 This editable draft gives you a complete starting point that can be refined, expanded, or exported.
 
-${imageBlock}`.trim();
+${imageBlock || fallbackImagePlaceholder}`.trim();
+}
+
+function ensureImagePlaceholders(content, input) {
+  if (!input.includeImages) {
+    return content;
+  }
+
+  if (/!\[[^\]]+\]\((generated-image:\/\/|https?:\/\/)/i.test(content)) {
+    return content;
+  }
+
+  const label = input.language === "hindi" ? "चित्र 1" : "Figure 1";
+  const description =
+    input.language === "hindi"
+      ? `${input.topic} के लिए विवरणात्मक विज़ुअल`
+      : `descriptive visual for ${input.topic}`;
+
+  return `${content}\n\n## ${input.language === "hindi" ? "चित्र प्लेसहोल्डर" : "Image Placeholder"}\n![${label}: ${description}](generated-image://figure-1)`;
 }
 
 async function generateWithConfiguredProvider(input) {
@@ -406,16 +430,18 @@ async function generateWithConfiguredProvider(input) {
     throw new Error("AI response did not include message content.");
   }
 
+  const normalizedContent = ensureImagePlaceholders(content, input);
+
   return {
     provider,
-    content,
+    content: normalizedContent,
     usage: {
       promptTokens: Number(data?.usage?.prompt_tokens) || estimateTokenCount(prompt),
       completionTokens:
-        Number(data?.usage?.completion_tokens) || estimateTokenCount(content),
+        Number(data?.usage?.completion_tokens) || estimateTokenCount(normalizedContent),
       totalTokens:
         Number(data?.usage?.total_tokens) ||
-        estimateTokenCount(prompt) + estimateTokenCount(content),
+        estimateTokenCount(prompt) + estimateTokenCount(normalizedContent),
       source: data?.usage ? "provider" : "estimated",
     },
   };

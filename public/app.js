@@ -9,7 +9,7 @@ const state = {
   selectedProjectId: null,
   currentView: "workspace",
   authMode: "login",
-  pendingGenerate: false,
+  authReady: false,
 };
 
 const elements = {
@@ -213,12 +213,26 @@ function renderPageItem(item) {
   if (item.type === "title") return `<h1>${escapeHtml(item.text)}</h1>`;
   if (item.type === "heading") return `<h2>${escapeHtml(item.text)}</h2>`;
   if (item.type === "subheading") return `<h3>${escapeHtml(item.text)}</h3>`;
+  if (item.type === "image") {
+    return `
+      <figure class="generated-image-card">
+        <div class="generated-image-art ${item.variant || "standard"}">
+          <span>${item.variant === "color" ? "Color visual" : "Visual concept"}</span>
+        </div>
+        <figcaption>${escapeHtml(item.text)}</figcaption>
+      </figure>
+    `;
+  }
   if (item.type === "bullet") return `<p class="bullet-item">• ${escapeHtml(item.text)}</p>`;
   return `<p>${escapeHtml(item.text)}</p>`;
 }
 
+function hasSessionToken() {
+  return Boolean(state.token);
+}
+
 function isLoggedIn() {
-  return Boolean(state.token && state.user);
+  return hasSessionToken();
 }
 
 function setAuthMode(mode) {
@@ -241,11 +255,11 @@ function closeAuthModal() {
 }
 
 function renderShell() {
-  const loggedIn = isLoggedIn();
+  const loggedIn = hasSessionToken();
   elements.guestActions.hidden = loggedIn;
   elements.userActions.hidden = !loggedIn;
   elements.navAccount.hidden = !loggedIn;
-  elements.userBadge.textContent = loggedIn ? state.user.name || state.user.email : "Guest";
+  elements.userBadge.textContent = state.user ? state.user.name || state.user.email : "Logged in";
 
   if (!loggedIn && state.currentView === "account") {
     state.currentView = "workspace";
@@ -272,17 +286,18 @@ function updateActionButtons() {
   const project = getSelectedProject();
   const isPaid = project?.payment?.status === "paid";
   const hasProject = Boolean(project);
-  const loggedIn = isLoggedIn();
+  const loggedIn = hasSessionToken();
 
   elements.saveButton.disabled = !loggedIn || !isPaid;
   elements.unlockButton.disabled = !loggedIn || !hasProject || isPaid;
   elements.downloadDocx.disabled = !loggedIn || !isPaid;
   elements.downloadPdf.disabled = !loggedIn || !isPaid;
   elements.lockAction.disabled = !loggedIn || !hasProject || isPaid;
+  elements.generateButton.textContent = loggedIn ? "Generate Document" : "Login to Generate";
 }
 
 function renderProjects() {
-  if (!isLoggedIn()) {
+  if (!hasSessionToken()) {
     elements.projectList.innerHTML =
       '<p class="muted">Login to see customer history and generated documents.</p>';
     return;
@@ -322,11 +337,75 @@ function renderProjects() {
 function renderSummary(summary) {
   elements.historyGenerated.textContent = String(summary?.generatedDocuments || 0);
   elements.historyUnlocked.textContent = String(summary?.paidDocuments || 0);
-  elements.trialBadge.textContent = isLoggedIn()
+  elements.trialBadge.textContent = hasSessionToken()
     ? summary?.freeTrialActive
-      ? "Free Trial: active"
-      : "Free Trial: platform fee applies"
-    : "Free Trial: login required";
+      ? "Trial active"
+      : "Platform fee active"
+    : "Login required";
+}
+
+function countWords(value = "") {
+  const normalized = String(value).trim();
+  return normalized ? normalized.split(/\s+/).length : 0;
+}
+
+function estimateParagraphWords(item) {
+  const base = Math.max(1, countWords(item.text));
+
+  if (item.type === "title") return base + 20;
+  if (item.type === "heading") return base + 14;
+  if (item.type === "subheading") return base + 8;
+  if (item.type === "image") return base + 100;
+  return base;
+}
+
+function toStructuredPreviewItems(markdown, colorMode = "standard") {
+  return splitMarkdownLines(markdown)
+    .map((line) => line.trimEnd())
+    .filter((line, index, lines) => line || lines[index - 1])
+    .map((line) => {
+      const imageMatch = line.match(/^!\[([^\]]+)\]\(([^)]+)\)$/);
+      if (imageMatch) {
+        return {
+          type: "image",
+          text: imageMatch[1],
+          src: imageMatch[2],
+          variant: colorMode === "color" ? "color" : "standard",
+        };
+      }
+      if (line.startsWith("# ")) return { type: "title", text: line.replace(/^# /, "") };
+      if (line.startsWith("## ")) return { type: "heading", text: line.replace(/^## /, "") };
+      if (line.startsWith("### ")) return { type: "subheading", text: line.replace(/^### /, "") };
+      if (line.startsWith("- ")) return { type: "bullet", text: line.replace(/^- /, "") };
+      return { type: "body", text: line };
+    });
+}
+
+function paginatePreview(markdown, wordsPerPage, colorMode) {
+  const items = toStructuredPreviewItems(markdown, colorMode);
+  const safeWordsPerPage = Math.max(120, Number(wordsPerPage) || 450);
+  const pages = [];
+  let currentPage = [];
+  let currentWeight = 0;
+
+  items.forEach((item) => {
+    const itemWeight = estimateParagraphWords(item);
+
+    if (currentPage.length && currentWeight + itemWeight > safeWordsPerPage) {
+      pages.push(currentPage);
+      currentPage = [];
+      currentWeight = 0;
+    }
+
+    currentPage.push(item);
+    currentWeight += itemWeight;
+  });
+
+  if (currentPage.length) {
+    pages.push(currentPage);
+  }
+
+  return pages;
 }
 
 function renderPricing(project) {
@@ -362,20 +441,16 @@ function renderPreview(project) {
     return;
   }
 
-  const content = project.content || project.previewContent || "";
-  const items = toStructuredParagraphs(content);
-  const cards = [];
-  let page = [];
+  const wordsPerPage = project?.pricing?.wordsPerPage || 450;
+  const previewLimit = project?.pricing?.previewPageLimit || 3;
+  const pages = paginatePreview(
+    project.content || project.previewContent || "",
+    wordsPerPage,
+    project.colorMode
+  );
+  const visiblePages = project.payment?.status === "paid" ? pages : pages.slice(0, previewLimit);
 
-  items.forEach((item, index) => {
-    page.push(item);
-    if (page.length >= 8 || index === items.length - 1) {
-      cards.push(page);
-      page = [];
-    }
-  });
-
-  elements.previewContainer.innerHTML = cards
+  elements.previewContainer.innerHTML = visiblePages
     .map(
       (group, index) => `
         <article class="preview-page">
@@ -389,6 +464,27 @@ function renderPreview(project) {
     )
     .join("");
 
+  if (project.payment?.status !== "paid" && project.hasLockedContent) {
+    elements.previewContainer.insertAdjacentHTML(
+      "beforeend",
+      `
+        <article class="preview-page locked-page">
+          <div class="preview-page-header">
+            <span>Page ${previewLimit + 1} onward</span>
+            <span>Locked</span>
+          </div>
+          <div class="lock-overlay">
+            <div>
+              <p class="mini-label">Unlock Required</p>
+              <h3>Pay & unlock to continue reading</h3>
+              <p class="muted">Only the first ${previewLimit} pages are visible in preview mode.</p>
+            </div>
+          </div>
+        </article>
+      `
+    );
+  }
+
   elements.lockCard.hidden = project.payment?.status === "paid" || !project.hasLockedContent;
 }
 
@@ -396,11 +492,13 @@ function renderEditor(project) {
   if (!project) {
     elements.contentEditor.value = "";
     elements.contentEditor.disabled = true;
+    elements.contentEditor.hidden = true;
     return;
   }
 
   const isPaid = project.payment?.status === "paid";
   elements.contentEditor.disabled = !isPaid;
+  elements.contentEditor.hidden = !isPaid;
   elements.contentEditor.value = isPaid ? project.content || "" : "";
 }
 
@@ -434,12 +532,12 @@ function upsertProject(project) {
 async function loadHealth() {
   const data = await api("/api/health", { headers: {} });
   state.provider = data.provider;
-  elements.providerBadge.textContent = `Provider: ${data.provider}`;
+  elements.providerBadge.textContent = `AI: ${data.provider}`;
 }
 
 async function loadConfig() {
-  if (!isLoggedIn()) {
-    elements.paymentBadge.textContent = "Payments: login required";
+  if (!hasSessionToken()) {
+    elements.paymentBadge.textContent = "Pay: login required";
     return;
   }
 
@@ -447,7 +545,7 @@ async function loadConfig() {
   state.pricingConfig = data.pricing;
   state.paymentMode = data.payment.mode;
   state.paymentKeyId = data.payment.razorpayKeyId;
-  elements.paymentBadge.textContent = `Payments: ${state.paymentMode}`;
+  elements.paymentBadge.textContent = `Pay: ${state.paymentMode}`;
 }
 
 async function loadProfile() {
@@ -457,7 +555,7 @@ async function loadProfile() {
 }
 
 async function loadProjects() {
-  if (!isLoggedIn()) {
+  if (!hasSessionToken()) {
     state.projects = [];
     state.selectedProjectId = null;
     renderSummary({});
@@ -496,6 +594,7 @@ async function loadProjects() {
 async function bootAuthenticatedApp() {
   await Promise.all([loadProfile(), loadHealth(), loadConfig()]);
   await loadProjects();
+  state.authReady = true;
   renderShell();
 }
 
@@ -515,13 +614,8 @@ async function handleLogin(event) {
     saveSession(data.token, data.user);
     await bootAuthenticatedApp();
     closeAuthModal();
-    showToast("Logged in successfully.");
+    showToast("Login successful. Please click Generate Document to continue.");
     elements.loginForm.reset();
-
-    if (state.pendingGenerate) {
-      state.pendingGenerate = false;
-      elements.generatorForm.requestSubmit();
-    }
   } catch (error) {
     showToast(error.message);
   }
@@ -547,13 +641,8 @@ async function handleRegister(event) {
     saveSession(data.token, data.user);
     await bootAuthenticatedApp();
     closeAuthModal();
-    showToast("Account created successfully.");
+    showToast("Account created successfully. You can now generate the document.");
     elements.registerForm.reset();
-
-    if (state.pendingGenerate) {
-      state.pendingGenerate = false;
-      elements.generatorForm.requestSubmit();
-    }
   } catch (error) {
     showToast(error.message);
   }
@@ -594,10 +683,10 @@ async function handleLogout() {
   state.currentView = "workspace";
   renderShell();
   await loadHealth().catch(() => {
-    elements.providerBadge.textContent = "Provider: unavailable";
+    elements.providerBadge.textContent = "AI: unavailable";
   });
-  elements.paymentBadge.textContent = "Payments: login required";
-  elements.trialBadge.textContent = "Free Trial: login required";
+  elements.paymentBadge.textContent = "Pay: login required";
+  elements.trialBadge.textContent = "Trial: login required";
   renderProjects();
   renderPreview(null);
   renderPricing(null);
@@ -607,7 +696,7 @@ async function handleLogout() {
 }
 
 function requireLoginForAction(message) {
-  if (isLoggedIn()) {
+  if (hasSessionToken()) {
     return true;
   }
 
@@ -622,7 +711,6 @@ async function handleGenerate(event) {
   event.preventDefault();
 
   if (!requireLoginForAction("Please login before generating a document.")) {
-    state.pendingGenerate = true;
     return;
   }
 
@@ -857,12 +945,12 @@ async function init() {
   try {
     await loadHealth();
   } catch (_error) {
-    elements.providerBadge.textContent = "Provider: unavailable";
+    elements.providerBadge.textContent = "AI: unavailable";
   }
 
   if (!state.token) {
-    elements.paymentBadge.textContent = "Payments: login required";
-    elements.trialBadge.textContent = "Free Trial: login required";
+    elements.paymentBadge.textContent = "Pay: login required";
+    elements.trialBadge.textContent = "Trial: login required";
     return;
   }
 
@@ -871,8 +959,8 @@ async function init() {
   } catch (_error) {
     clearSession();
     renderShell();
-    elements.paymentBadge.textContent = "Payments: login required";
-    elements.trialBadge.textContent = "Free Trial: login required";
+    elements.paymentBadge.textContent = "Pay: login required";
+    elements.trialBadge.textContent = "Trial: login required";
   }
 }
 
