@@ -1,0 +1,13 @@
+services:
+  bookforge-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bookforge-app-macmini
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+    ports:
+      - "${BOOKFORGE_HOST_PORT:-3010}:3000"
