@@ -18,27 +18,43 @@ function getAllowedOrigins() {
     .filter(Boolean);
 }
 
+function isOriginAllowed(origin, allowedOrigins) {
+  if (!origin) {
+    return false;
+  }
+
+  if (!allowedOrigins.length) {
+    return true;
+  }
+
+  return allowedOrigins.includes("*") || allowedOrigins.includes(origin);
+}
+
 app.use((req, res, next) => {
   const origin = String(req.headers.origin || "");
   const allowedOrigins = getAllowedOrigins();
-  const allowAnyOrigin = allowedOrigins.includes("*");
+  const originAllowed = isOriginAllowed(origin, allowedOrigins);
 
-  if (allowAnyOrigin && origin) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  } else if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
+  if (originAllowed) {
+    const requestedHeaders = String(req.headers["access-control-request-headers"] || "").trim();
 
-  if (origin && (allowAnyOrigin || allowedOrigins.includes(origin))) {
-    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin, Access-Control-Request-Headers");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-Requested-With"
+      requestedHeaders || "Content-Type, Authorization, X-Requested-With"
     );
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Max-Age", "86400");
   }
 
   if (req.method === "OPTIONS") {
+    if (origin && !originAllowed) {
+      return res.status(403).json({
+        message: `CORS blocked for origin ${origin}. Add it to CORS_ORIGIN to allow this frontend.`,
+      });
+    }
+
     return res.sendStatus(204);
   }
 
