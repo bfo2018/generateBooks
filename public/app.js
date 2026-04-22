@@ -1,6 +1,6 @@
 const state = {
   token: localStorage.getItem("bookforge-token") || "",
-  user: null,
+  user: JSON.parse(localStorage.getItem("bookforge-user") || "null"),
   provider: "loading",
   paymentMode: "loading",
   paymentKeyId: "",
@@ -76,6 +76,11 @@ const elements = {
   profileEmail: document.getElementById("profileEmail"),
   profileQualification: document.getElementById("profileQualification"),
   profileAddress: document.getElementById("profileAddress"),
+  profileSummaryName: document.getElementById("profileSummaryName"),
+  profileSummaryEmail: document.getElementById("profileSummaryEmail"),
+  profileSummaryMobile: document.getElementById("profileSummaryMobile"),
+  profileSummaryQualification: document.getElementById("profileSummaryQualification"),
+  profileSummaryAddress: document.getElementById("profileSummaryAddress"),
   loginEmail: document.getElementById("loginEmail"),
   loginPassword: document.getElementById("loginPassword"),
   registerName: document.getElementById("registerName"),
@@ -181,12 +186,16 @@ function clearSession() {
   state.projects = [];
   state.selectedProjectId = null;
   localStorage.removeItem("bookforge-token");
+  localStorage.removeItem("bookforge-user");
+  populateProfile();
 }
 
 function saveSession(token, user) {
   state.token = token;
   state.user = user;
   localStorage.setItem("bookforge-token", token);
+  localStorage.setItem("bookforge-user", JSON.stringify(user || null));
+  populateProfile();
 }
 
 function getSelectedProject() {
@@ -319,17 +328,35 @@ function renderShell() {
   elements.accountView.hidden = state.currentView !== "account";
   elements.navWorkspace.classList.toggle("active", state.currentView === "workspace");
   elements.navAccount.classList.toggle("active", state.currentView === "account");
+  updateActionButtons();
 }
 
 function populateProfile() {
   const user = state.user;
-  if (!user) return;
+  if (!user) {
+    elements.profileName.value = "";
+    elements.profileMobile.value = "";
+    elements.profileEmail.value = "";
+    elements.profileQualification.value = "";
+    elements.profileAddress.value = "";
+    elements.profileSummaryName.textContent = "Not available";
+    elements.profileSummaryEmail.textContent = "Not available";
+    elements.profileSummaryMobile.textContent = "Not available";
+    elements.profileSummaryQualification.textContent = "Not available";
+    elements.profileSummaryAddress.textContent = "Not available";
+    return;
+  }
 
   elements.profileName.value = user.name || "";
   elements.profileMobile.value = user.mobileNumber || "";
   elements.profileEmail.value = user.email || "";
   elements.profileQualification.value = user.qualification || "";
   elements.profileAddress.value = user.address || "";
+  elements.profileSummaryName.textContent = user.name || "Not available";
+  elements.profileSummaryEmail.textContent = user.email || "Not available";
+  elements.profileSummaryMobile.textContent = user.mobileNumber || "Not available";
+  elements.profileSummaryQualification.textContent = user.qualification || "Not available";
+  elements.profileSummaryAddress.textContent = user.address || "Not available";
 }
 
 function updateActionButtons() {
@@ -680,10 +707,12 @@ async function handleLogin(event) {
     });
 
     saveSession(data.token, data.user);
+    renderShell();
     try {
       await bootAuthenticatedApp();
     } catch (error) {
       renderShell();
+      closeAuthModal();
       showToast(error.message || "Login succeeded, but we could not load your account fully yet.");
       return;
     }
@@ -714,6 +743,7 @@ async function handleRegister(event) {
     });
 
     saveSession(data.token, data.user);
+    renderShell();
     try {
       await bootAuthenticatedApp();
     } catch (error) {
@@ -1036,6 +1066,7 @@ function bindEvents() {
 
 async function init() {
   bindEvents();
+  populateProfile();
   elements.requestedPages.value = "10";
   handleDocumentTypeChange();
   renderShell();
@@ -1064,10 +1095,8 @@ async function init() {
   try {
     await bootAuthenticatedApp();
   } catch (_error) {
-    clearSession();
     renderShell();
-    elements.paymentBadge.textContent = "Pay: login required";
-    elements.trialBadge.textContent = "Trial: login required";
+    elements.paymentBadge.textContent = "Pay: unavailable";
   }
 }
 
