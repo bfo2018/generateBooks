@@ -26,8 +26,6 @@ const { sanitizeUser } = require("../utils/auth");
 
 const router = express.Router();
 
-router.use(requireAuth);
-
 function normalizeInput(body = {}) {
   const documentType = String(body.documentType || body.bookType || "").trim().toLowerCase();
   const language = String(body.language || "").trim().toLowerCase() || "english";
@@ -144,6 +142,8 @@ router.get("/config", async (req, res) => {
     },
   });
 });
+
+router.use(requireAuth);
 
 router.post("/generate", async (req, res) => {
   try {

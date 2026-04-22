@@ -126,7 +126,7 @@ async function api(url, options = {}) {
     ...(options.headers || {}),
   };
 
-  if (state.token) {
+  if (state.token && options.auth !== false) {
     headers.Authorization = `Bearer ${state.token}`;
   }
 
@@ -541,7 +541,10 @@ function upsertProject(project) {
 }
 
 async function loadHealth() {
-  const data = await api("/api/health", { headers: {} });
+  const data = await api("/api/health", {
+    auth: false,
+    headers: {},
+  });
   state.provider = data.provider;
   elements.providerBadge.textContent = `AI: ${data.provider}`;
 }
@@ -552,7 +555,7 @@ async function loadConfig() {
     return;
   }
 
-  const data = await api("/api/projects/config");
+  const data = await api("/api/projects/config", { auth: false });
   state.pricingConfig = data.pricing;
   state.paymentMode = data.payment.mode;
   state.paymentKeyId = data.payment.razorpayKeyId;
@@ -603,7 +606,24 @@ async function loadProjects() {
 }
 
 async function bootAuthenticatedApp() {
-  await Promise.all([loadProfile(), loadHealth(), loadConfig()]);
+  const [profileResult, healthResult, configResult] = await Promise.allSettled([
+    loadProfile(),
+    loadHealth(),
+    loadConfig(),
+  ]);
+
+  if (profileResult.status === "rejected") {
+    throw profileResult.reason;
+  }
+
+  if (healthResult.status === "rejected") {
+    elements.providerBadge.textContent = "AI: unavailable";
+  }
+
+  if (configResult.status === "rejected") {
+    elements.paymentBadge.textContent = "Pay: unavailable";
+  }
+
   await loadProjects();
   state.authReady = true;
   renderShell();
@@ -623,7 +643,14 @@ async function handleLogin(event) {
     });
 
     saveSession(data.token, data.user);
-    await bootAuthenticatedApp();
+    try {
+      await bootAuthenticatedApp();
+    } catch (error) {
+      renderShell();
+      showToast(error.message || "Login succeeded, but we could not load your account fully yet.");
+      return;
+    }
+
     closeAuthModal();
     showToast("Login successful. Please click Generate Document to continue.");
     elements.loginForm.reset();
@@ -650,7 +677,16 @@ async function handleRegister(event) {
     });
 
     saveSession(data.token, data.user);
-    await bootAuthenticatedApp();
+    try {
+      await bootAuthenticatedApp();
+    } catch (error) {
+      renderShell();
+      closeAuthModal();
+      showToast(error.message || "Account created, but we could not load your profile fully yet.");
+      elements.registerForm.reset();
+      return;
+    }
+
     closeAuthModal();
     showToast("Account created successfully. You can now generate the document.");
     elements.registerForm.reset();
