@@ -97,13 +97,19 @@ async function loadProjectOr404(req, res) {
 }
 
 router.get("/", async (req, res) => {
-  const projects = await listProjects(String(req.user._id));
-  const serialized = projects.map(serializeProject);
+  try {
+    const projects = await listProjects(String(req.user._id));
+    const serialized = projects.map(serializeProject);
 
-  res.json({
-    projects: serialized,
-    summary: createProjectSummary(serialized, req.user),
-  });
+    res.json({
+      projects: serialized,
+      summary: createProjectSummary(serialized, req.user),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message || "Failed to load projects.",
+    });
+  }
 });
 
 router.get("/config", async (req, res) => {

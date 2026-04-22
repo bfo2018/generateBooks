@@ -781,9 +781,19 @@ async function handleGenerate(event) {
     });
 
     upsertProject(project);
-    await loadProjects();
     selectProject(project._id);
-    showToast("Document generated successfully.");
+
+    try {
+      await loadProjects();
+      selectProject(project._id);
+      showToast("Document generated successfully.");
+    } catch (error) {
+      renderProjects();
+      updateActionButtons();
+      showToast(
+        error.message || "Document generated, but project history could not be refreshed."
+      );
+    }
   } catch (error) {
     showToast(error.message);
   } finally {
