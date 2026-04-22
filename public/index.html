@@ -108,6 +108,11 @@
                 </label>
 
                 <label>
+                  Number Of Pages
+                  <input id="requestedPages" type="number" min="1" max="200" step="1" value="10" />
+                </label>
+
+                <label>
                   Color Mode
                   <select id="colorMode">
                     <option value="standard">Standard</option>
@@ -120,6 +125,10 @@
                 <input id="includeImages" type="checkbox" />
                 <span>Add image and figure suggestions to this document</span>
               </label>
+
+              <p class="inline-helper muted">
+                Increasing or decreasing the requested page count changes estimated token usage and cost.
+              </p>
 
               <p class="inline-helper muted">
                 If the customer is not logged in, this button opens login first.

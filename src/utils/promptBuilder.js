@@ -62,28 +62,55 @@ function getLanguageInstruction(language) {
     : "Write the full document in English using natural, reader-friendly language.";
 }
 
+function getPageLimitInstruction(description) {
+  const text = String(description || "");
+  const match = text.match(/\b(?:max(?:imum)?|up to)\s*(\d+)\s*pages?\b/i);
+
+  if (!match) {
+    return "Aim for a practical, concise length that matches the topic.";
+  }
+
+  const pageCount = Number(match[1]);
+
+  if (!Number.isFinite(pageCount) || pageCount <= 0) {
+    return "Aim for a practical, concise length that matches the topic.";
+  }
+
+  return `Keep the document concise and target a maximum length of about ${pageCount} pages.`;
+}
+
 function buildBookPrompt({
   topic,
   description,
   documentType,
   language,
+  paperSize,
+  requestedPages,
   includeImages,
   colorMode,
 }) {
   const blueprint = getDocumentBlueprint(documentType);
+  const normalizedDescription = String(description || "");
   const imageInstruction = includeImages
-    ? `Also include short figure suggestions and image captions suitable for a ${colorMode} file. Add at least one Markdown image placeholder in this exact pattern: ![Figure 1: short visual description](generated-image://figure-1)`
+    ? `Also include short figure suggestions and image captions suitable for a ${colorMode} file. Treat visuals as ${colorMode === "color" ? "full-color" : "standard"} illustrations. Add at least one Markdown image placeholder in this exact pattern: ![Figure 1: short visual description](generated-image://figure-1)`
     : "Do not include image prompts or figure captions.";
+  const safeRequestedPages = Math.max(1, Number(requestedPages) || 10);
+  const pageLimitInstruction = normalizedDescription.match(/\b(?:max(?:imum)?|up to)\s*\d+\s*pages?\b/i)
+    ? getPageLimitInstruction(normalizedDescription)
+    : `Target about ${safeRequestedPages} pages in the final document.`;
 
   return `
 You are an expert academic writer and publishing assistant.
 Create a structured ${blueprint.label} on the topic "${topic}".
 
 Topic description:
-${description || "No additional description provided."}
+${normalizedDescription || "No additional description provided."}
 
 Language:
 ${getLanguageInstruction(language)}
+
+Layout:
+Use a ${paperSize || "A4"} page layout as the intended output format.
 
 Formatting rules:
 1. Return Markdown only.
@@ -91,8 +118,9 @@ Formatting rules:
 3. Use the following major structure as guidance: ${blueprint.sections.join(", ")}.
 4. ${blueprint.instructions.join(" ")}
 5. Keep the writing coherent, useful, and ready for export.
-6. ${imageInstruction}
-7. Do not include code fences.
+6. ${pageLimitInstruction}
+7. ${imageInstruction}
+8. Do not include code fences.
 `.trim();
 }
 

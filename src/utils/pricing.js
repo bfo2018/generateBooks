@@ -85,6 +85,7 @@ function calculateProjectPricing({
   userCreatedAt,
   includeImages = false,
   colorMode = "standard",
+  requestedPages = 10,
   documentType = "book",
 }) {
   const config = getPricingConfig();
@@ -115,6 +116,7 @@ function calculateProjectPricing({
     totalChargeInr: Number((tokenCostInr + platformFeeInr + imageChargeInr).toFixed(2)),
     wordCount: countWords(content),
     estimatedPages: paragraphPages.length || 1,
+    requestedPages: Math.max(1, Number(requestedPages) || 10),
     paperSize: getDefaultPaperSize(documentType),
     freeTrialActive: isWithinFreeTrial(userCreatedAt),
     previewContent: buildPreviewMarkdown(
@@ -125,8 +127,38 @@ function calculateProjectPricing({
   };
 }
 
+function estimateGenerationPricing({
+  requestedPages = 10,
+  includeImages = false,
+  colorMode = "standard",
+  userCreatedAt,
+}) {
+  const config = getPricingConfig();
+  const safePages = Math.max(1, Number(requestedPages) || 10);
+  const estimatedOutputTokens = Math.max(300, Math.round(safePages * config.wordsPerPage * 1.35));
+  const estimatedPromptTokens = Math.max(180, Math.round(220 + safePages * 12));
+  const tokenCostInr =
+    (estimatedPromptTokens / 1000) * config.inputCostPer1kTokensInr +
+    (estimatedOutputTokens / 1000) * config.outputCostPer1kTokensInr;
+  const platformFeeInr = isWithinFreeTrial(userCreatedAt) ? 0 : config.platformFeeInr;
+  const imageChargeInr = includeImages && colorMode === "color" ? config.imageChargeInr : 0;
+
+  return {
+    requestedPages: safePages,
+    estimatedPromptTokens,
+    estimatedOutputTokens,
+    estimatedTotalTokens: estimatedPromptTokens + estimatedOutputTokens,
+    tokenCostInr: Number(tokenCostInr.toFixed(2)),
+    platformFeeInr: Number(platformFeeInr.toFixed(2)),
+    imageChargeInr: Number(imageChargeInr.toFixed(2)),
+    totalChargeInr: Number((tokenCostInr + platformFeeInr + imageChargeInr).toFixed(2)),
+    wordsPerPage: config.wordsPerPage,
+  };
+}
+
 module.exports = {
   calculateProjectPricing,
+  estimateGenerationPricing,
   estimateTokenCount,
   getDefaultPaperSize,
   getPricingConfig,

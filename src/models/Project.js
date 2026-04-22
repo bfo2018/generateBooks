@@ -32,6 +32,12 @@ const projectSchema = new mongoose.Schema(
       enum: ["A4", "A5", "Letter"],
       default: "A4",
     },
+    requestedPages: {
+      type: Number,
+      min: 1,
+      max: 200,
+      default: 10,
+    },
     includeImages: {
       type: Boolean,
       default: false,

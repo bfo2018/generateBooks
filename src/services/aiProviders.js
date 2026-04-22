@@ -367,8 +367,16 @@ function ensureImagePlaceholders(content, input) {
     input.language === "hindi"
       ? `${input.topic} के लिए विवरणात्मक विज़ुअल`
       : `descriptive visual for ${input.topic}`;
+  const placeholderSection = `## ${input.language === "hindi" ? "चित्र प्लेसहोल्डर" : "Image Placeholder"}\n![${label}: ${description}](generated-image://figure-1)`;
+  const lines = String(content || "").split("\n");
+  const insertAt = lines.findIndex((line, index) => index > 0 && line.startsWith("## "));
 
-  return `${content}\n\n## ${input.language === "hindi" ? "चित्र प्लेसहोल्डर" : "Image Placeholder"}\n![${label}: ${description}](generated-image://figure-1)`;
+  if (insertAt === -1) {
+    return `${content}\n\n${placeholderSection}`;
+  }
+
+  lines.splice(insertAt, 0, "", placeholderSection, "");
+  return lines.join("\n");
 }
 
 async function generateWithConfiguredProvider(input) {

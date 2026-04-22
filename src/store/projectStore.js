@@ -23,6 +23,7 @@ function createMemoryProject(input) {
     documentType: input.documentType,
     language: input.language || "english",
     paperSize: input.paperSize || "A4",
+    requestedPages: Math.max(1, Number(input.requestedPages) || 10),
     includeImages: Boolean(input.includeImages),
     colorMode: input.colorMode || "standard",
     provider: input.provider || "mock",

@@ -56,6 +56,7 @@ const elements = {
   documentType: document.getElementById("documentType"),
   language: document.getElementById("language"),
   paperSize: document.getElementById("paperSize"),
+  requestedPages: document.getElementById("requestedPages"),
   colorMode: document.getElementById("colorMode"),
   includeImages: document.getElementById("includeImages"),
   pricingTotal: document.getElementById("pricingTotal"),
@@ -200,6 +201,44 @@ function getPaperSizeForType(documentType) {
   if (documentType === "topic-note") return "A5";
   if (documentType === "research-paper") return "Letter";
   return "A4";
+}
+
+function getRequestedPagesValue() {
+  return Math.max(1, Math.min(200, Number(elements.requestedPages.value) || 10));
+}
+
+function renderGenerationEstimate() {
+  if (!state.pricingConfig) {
+    elements.pricingHint.textContent =
+      "Token cost, platform fee, and optional image/color charge will be shown here.";
+    return;
+  }
+
+  const requestedPages = getRequestedPagesValue();
+  const wordsPerPage = Number(state.pricingConfig.wordsPerPage) || 450;
+  const estimatedOutputTokens = Math.max(300, Math.round(requestedPages * wordsPerPage * 1.35));
+  const estimatedPromptTokens = Math.max(180, Math.round(220 + requestedPages * 12));
+  const estimatedTotalTokens = estimatedPromptTokens + estimatedOutputTokens;
+  const tokenCostInr =
+    (estimatedPromptTokens / 1000) * (Number(state.pricingConfig.inputCostPer1kTokensInr) || 0) +
+    (estimatedOutputTokens / 1000) * (Number(state.pricingConfig.outputCostPer1kTokensInr) || 0);
+  const imageChargeInr =
+    elements.includeImages.checked && elements.colorMode.value === "color"
+      ? Number(state.pricingConfig.colorImageChargeInr || 0)
+      : 0;
+  const totalEstimate = tokenCostInr + imageChargeInr;
+
+  if (!getSelectedProject()) {
+    elements.pricingTotal.textContent = formatMoney(totalEstimate);
+    elements.tokenUsage.textContent = String(estimatedTotalTokens);
+    elements.pageEstimate.textContent = String(requestedPages);
+    elements.paperSizeLabel.textContent = elements.paperSize.value || "A4";
+    elements.accessState.textContent = "Estimate";
+  }
+
+  elements.pricingHint.textContent = `Estimated for ${requestedPages} pages: token ${formatMoney(
+    tokenCostInr
+  )} + image charge ${formatMoney(imageChargeInr)}. More pages increase cost.`;
 }
 
 function splitMarkdownLines(markdown) {
@@ -422,13 +461,14 @@ function paginatePreview(markdown, wordsPerPage, colorMode) {
 function renderPricing(project) {
   const pricing = project?.pricing || {};
   const isPaid = project?.payment?.status === "paid";
+  const requestedPages = project?.requestedPages || pricing.requestedPages || pricing.estimatedPages || 0;
 
   elements.pricingTotal.textContent = formatMoney(pricing.totalChargeInr || 0);
   elements.pricingHint.textContent = `Token ${formatMoney(pricing.tokenCostInr || 0)} + platform ${formatMoney(
     pricing.platformFeeInr || 0
-  )} + image charge ${formatMoney(pricing.imageChargeInr || 0)}`;
+  )} + image charge ${formatMoney(pricing.imageChargeInr || 0)} for requested ${requestedPages} pages`;
   elements.tokenUsage.textContent = String(project?.usage?.totalTokens || 0);
-  elements.pageEstimate.textContent = String(pricing.estimatedPages || 0);
+  elements.pageEstimate.textContent = String(requestedPages || pricing.estimatedPages || 0);
   elements.paperSizeLabel.textContent = project?.paperSize || pricing.paperSize || "A4";
   elements.accessState.textContent = isPaid ? "Unlocked" : "Locked";
   elements.lockMessage.textContent = isPaid
@@ -523,6 +563,7 @@ function selectProject(projectId) {
   elements.documentType.value = project.documentType || "book";
   elements.language.value = project.language || "english";
   elements.paperSize.value = project.paperSize || getPaperSizeForType(project.documentType);
+  elements.requestedPages.value = String(project.requestedPages || project.pricing?.requestedPages || 10);
   elements.colorMode.value = project.colorMode || "standard";
   elements.includeImages.checked = Boolean(project.includeImages);
   elements.editorTitle.textContent = project.topic;
@@ -550,16 +591,12 @@ async function loadHealth() {
 }
 
 async function loadConfig() {
-  if (!hasSessionToken()) {
-    elements.paymentBadge.textContent = "Pay: login required";
-    return;
-  }
-
   const data = await api("/api/projects/config", { auth: false });
   state.pricingConfig = data.pricing;
   state.paymentMode = data.payment.mode;
   state.paymentKeyId = data.payment.razorpayKeyId;
   elements.paymentBadge.textContent = `Pay: ${state.paymentMode}`;
+  renderGenerationEstimate();
 }
 
 async function loadProfile() {
@@ -771,6 +808,7 @@ async function handleGenerate(event) {
       documentType: elements.documentType.value,
       language: elements.language.value,
       paperSize: elements.paperSize.value,
+      requestedPages: getRequestedPagesValue(),
       includeImages: elements.includeImages.checked,
       colorMode: elements.colorMode.value,
     };
@@ -819,6 +857,7 @@ async function handleSave() {
         documentType: elements.documentType.value,
         language: elements.language.value,
         paperSize: elements.paperSize.value,
+        requestedPages: getRequestedPagesValue(),
         includeImages: elements.includeImages.checked,
         colorMode: elements.colorMode.value,
         content: elements.contentEditor.value,
@@ -951,6 +990,7 @@ async function handleDownload(kind) {
 
 function handleDocumentTypeChange() {
   elements.paperSize.value = getPaperSizeForType(elements.documentType.value);
+  renderGenerationEstimate();
 }
 
 function showWorkspaceView() {
@@ -980,6 +1020,9 @@ function bindEvents() {
   elements.downloadDocx.addEventListener("click", () => handleDownload("docx"));
   elements.downloadPdf.addEventListener("click", () => handleDownload("pdf"));
   elements.documentType.addEventListener("change", handleDocumentTypeChange);
+  elements.requestedPages.addEventListener("input", renderGenerationEstimate);
+  elements.colorMode.addEventListener("change", renderGenerationEstimate);
+  elements.includeImages.addEventListener("change", renderGenerationEstimate);
   elements.navWorkspace.addEventListener("click", showWorkspaceView);
   elements.navAccount.addEventListener("click", showAccountView);
   elements.openLoginButton.addEventListener("click", () => openAuthModal("login"));
@@ -993,6 +1036,7 @@ function bindEvents() {
 
 async function init() {
   bindEvents();
+  elements.requestedPages.value = "10";
   handleDocumentTypeChange();
   renderShell();
   renderProjects();
@@ -1005,9 +1049,15 @@ async function init() {
     elements.providerBadge.textContent = "AI: unavailable";
   }
 
+  try {
+    await loadConfig();
+  } catch (_error) {
+    elements.paymentBadge.textContent = "Pay: unavailable";
+  }
+
   if (!state.token) {
-    elements.paymentBadge.textContent = "Pay: login required";
     elements.trialBadge.textContent = "Trial: login required";
+    renderGenerationEstimate();
     return;
   }
 

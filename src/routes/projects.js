@@ -31,6 +31,7 @@ function normalizeInput(body = {}) {
   const language = String(body.language || "").trim().toLowerCase() || "english";
   const includeImages = Boolean(body.includeImages);
   const colorMode = String(body.colorMode || "").trim().toLowerCase() || "standard";
+  const requestedPages = Math.max(1, Math.min(200, Number(body.requestedPages) || 10));
 
   return {
     topic: String(body.topic || "").trim(),
@@ -40,6 +41,7 @@ function normalizeInput(body = {}) {
     includeImages,
     colorMode: includeImages && colorMode === "color" ? "color" : "standard",
     paperSize: String(body.paperSize || "").trim() || getDefaultPaperSize(documentType),
+    requestedPages,
   };
 }
 
@@ -170,6 +172,7 @@ router.post("/generate", async (req, res) => {
       userCreatedAt: req.user.createdAt,
       includeImages: input.includeImages,
       colorMode: input.colorMode,
+      requestedPages: input.requestedPages,
       documentType: input.documentType,
     });
 
@@ -177,6 +180,7 @@ router.post("/generate", async (req, res) => {
       ...input,
       userId: String(req.user._id),
       paperSize: input.paperSize || pricing.paperSize,
+      requestedPages: input.requestedPages,
       provider: generated.provider,
       outline,
       content: generated.content,
@@ -225,6 +229,7 @@ router.put("/:id", async (req, res) => {
       userCreatedAt: req.user.createdAt,
       includeImages: input.includeImages,
       colorMode: input.colorMode,
+      requestedPages: input.requestedPages,
       documentType: input.documentType,
     });
 
@@ -234,6 +239,7 @@ router.put("/:id", async (req, res) => {
       documentType: input.documentType,
       language: input.language,
       paperSize: input.paperSize || pricing.paperSize,
+      requestedPages: input.requestedPages,
       includeImages: input.includeImages,
       colorMode: input.colorMode,
       content,
