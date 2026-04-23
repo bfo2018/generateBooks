@@ -20,6 +20,7 @@ function sanitizeUser(user) {
     email: user.email,
     address: user.address || "",
     qualification: user.qualification || "",
+    generatedCount: Math.max(0, Number(user.generatedCount) || 0),
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

@@ -21,6 +21,7 @@ function createMemoryUser(input) {
     email: normalizeEmail(input.email),
     address: input.address || "",
     qualification: input.qualification || "",
+    generatedCount: Math.max(0, Number(input.generatedCount) || 0),
     passwordHash: input.passwordHash,
     createdAt: now,
     updatedAt: now,
@@ -54,6 +55,7 @@ async function createUser(input) {
     email: normalizeEmail(input.email),
     address: String(input.address || "").trim(),
     qualification: String(input.qualification || "").trim(),
+    generatedCount: Math.max(0, Number(input.generatedCount) || 0),
     passwordHash: input.passwordHash || hashPassword(input.password),
   };
 
@@ -97,9 +99,41 @@ async function updateUser(id, updates) {
   }).lean();
 }
 
+async function incrementUserGeneratedCount(id, amount = 1) {
+  const safeAmount = Math.max(0, Number(amount) || 0);
+
+  if (process.env.STORAGE_MODE === "memory") {
+    const index = memoryUsers.findIndex((item) => item._id === id);
+
+    if (index === -1) {
+      return null;
+    }
+
+    memoryUsers[index] = {
+      ...memoryUsers[index],
+      generatedCount: Math.max(0, Number(memoryUsers[index].generatedCount || 0) + safeAmount),
+      updatedAt: new Date().toISOString(),
+    };
+
+    return clone(memoryUsers[index]);
+  }
+
+  return User.findByIdAndUpdate(
+    id,
+    {
+      $inc: { generatedCount: safeAmount },
+    },
+    {
+      new: true,
+      runValidators: true,
+    }
+  ).lean();
+}
+
 module.exports = {
   createUser,
   findUserByEmail,
   findUserById,
+  incrementUserGeneratedCount,
   updateUser,
 };

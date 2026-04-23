@@ -11,6 +11,7 @@ const {
   listProjects,
   updateProject,
 } = require("../store/projectStore");
+const { incrementUserGeneratedCount } = require("../store/userStore");
 const { createDocxBuffer, createPdfBuffer } = require("../utils/exporters");
 const { extractOutline } = require("../utils/markdown");
 const {
@@ -78,10 +79,13 @@ function serializeProject(project) {
 function createProjectSummary(projects = [], user) {
   const generatedDocuments = projects.length;
   const paidDocuments = projects.filter((project) => project.payment?.status === "paid").length;
+  const generatedCount = Math.max(0, Number(user?.generatedCount) || 0);
 
   return {
     generatedDocuments,
     paidDocuments,
+    generatedCount,
+    freeGenerationsRemaining: Math.max(0, 2 - generatedCount),
     freeTrialActive:
       typeof projects[0]?.pricing?.freeTrialActive === "boolean"
         ? projects[0].pricing.freeTrialActive
@@ -180,8 +184,7 @@ router.post("/generate/stream", async (req, res) => {
   };
 
   try {
-    const existingProjects = await listProjects(userId);
-    const freeGenerationGranted = existingProjects.length === 0;
+    const freeGenerationGranted = Math.max(0, Number(req.user.generatedCount) || 0) < 2;
     const generated = await streamWithConfiguredProvider(input, {
       signal: abortController.signal,
       onDelta: (_delta, accumulated) => {
@@ -220,10 +223,13 @@ router.post("/generate/stream", async (req, res) => {
         amountInr: freeGenerationGranted ? 0 : pricing.totalChargeInr,
       },
     });
+    const updatedUser = await incrementUserGeneratedCount(userId, 1);
+    req.user = updatedUser || req.user;
 
     writeChunk({
       type: "final",
       project: serializeProject(project.toObject ? project.toObject() : project),
+      user: sanitizeUser(req.user),
     });
     return res.end();
   } catch (error) {
@@ -250,8 +256,7 @@ router.post("/generate", async (req, res) => {
       });
     }
 
-    const existingProjects = await listProjects(userId);
-    const freeGenerationGranted = existingProjects.length === 0;
+    const freeGenerationGranted = Math.max(0, Number(req.user.generatedCount) || 0) < 2;
     const generated = await generateWithConfiguredProvider(input);
     const outline = extractOutline(generated.content);
     const usage = normalizeUsage(generated.usage, generated.content);
@@ -285,8 +290,13 @@ router.post("/generate", async (req, res) => {
         amountInr: freeGenerationGranted ? 0 : pricing.totalChargeInr,
       },
     });
+    const updatedUser = await incrementUserGeneratedCount(userId, 1);
+    req.user = updatedUser || req.user;
 
-    return res.status(201).json(serializeProject(project.toObject ? project.toObject() : project));
+    return res.status(201).json({
+      project: serializeProject(project.toObject ? project.toObject() : project),
+      user: sanitizeUser(req.user),
+    });
   } catch (error) {
     return res.status(500).json({
       message: error.message || "Failed to generate project.",

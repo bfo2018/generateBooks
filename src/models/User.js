@@ -29,6 +29,11 @@ const userSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    generatedCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     passwordHash: {
       type: String,
       required: true,

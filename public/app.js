@@ -225,6 +225,7 @@ async function streamGeneration(payload) {
   const decoder = new TextDecoder();
   let buffer = "";
   let finalProject = null;
+  let finalUser = null;
 
   while (true) {
     const { value, done } = await reader.read();
@@ -249,6 +250,7 @@ async function streamGeneration(payload) {
         renderGeneratingPreview(payload.topic, chunk.content || "", payload.paperSize, payload.colorMode);
       } else if (chunk.type === "final") {
         finalProject = chunk.project;
+        finalUser = chunk.user || null;
       } else if (chunk.type === "error") {
         throw new Error(chunk.message || "Failed to generate project.");
       }
@@ -259,7 +261,10 @@ async function streamGeneration(payload) {
     throw new Error("Generation finished without a saved project.");
   }
 
-  return finalProject;
+  return {
+    project: finalProject,
+    user: finalUser,
+  };
 }
 
 async function api(url, options = {}) {
@@ -373,18 +378,19 @@ function renderGenerationEstimate() {
       ? Number(state.pricingConfig.colorImageChargeInr || 0)
       : 0;
   const totalEstimate = tokenCostInr + imageChargeInr;
-  const firstDocumentFree = hasSessionToken() && state.projects.length === 0;
+  const freeGenerationsRemaining = Math.max(0, 2 - Math.max(0, Number(state.user?.generatedCount) || 0));
+  const freeDocumentAvailable = hasSessionToken() && freeGenerationsRemaining > 0;
 
   if (!getSelectedProject()) {
-    elements.pricingTotal.textContent = formatMoney(firstDocumentFree ? 0 : totalEstimate);
+    elements.pricingTotal.textContent = formatMoney(freeDocumentAvailable ? 0 : totalEstimate);
     elements.tokenUsage.textContent = String(estimatedTotalTokens);
     elements.pageEstimate.textContent = String(requestedPages);
     elements.paperSizeLabel.textContent = elements.paperSize.value || "A4";
-    elements.accessState.textContent = firstDocumentFree ? "Free" : "Estimate";
+    elements.accessState.textContent = freeDocumentAvailable ? "Free" : "Estimate";
   }
 
-  elements.pricingHint.textContent = firstDocumentFree
-    ? `Your first generated document is free. Requested ${requestedPages} pages will be unlocked for preview and download.`
+  elements.pricingHint.textContent = freeDocumentAvailable
+    ? `You have ${freeGenerationsRemaining} free generation${freeGenerationsRemaining === 1 ? "" : "s"} remaining. Requested ${requestedPages} pages will be unlocked for preview and download.`
     : `Estimated for ${requestedPages} pages: token ${formatMoney(
         tokenCostInr
       )} + image charge ${formatMoney(imageChargeInr)}. More pages increase cost.`;
@@ -555,6 +561,11 @@ function renderProjects() {
 function renderSummary(summary) {
   elements.historyGenerated.textContent = String(summary?.generatedDocuments || 0);
   elements.historyUnlocked.textContent = String(summary?.paidDocuments || 0);
+  if (summary?.profile) {
+    state.user = summary.profile;
+    localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(summary.profile));
+    populateProfile();
+  }
   elements.trialBadge.textContent = hasSessionToken()
     ? summary?.freeTrialActive
       ? "Trial active"
@@ -1046,7 +1057,15 @@ async function handleGenerate(event) {
       colorMode: elements.colorMode.value,
     };
 
-    const project = await streamGeneration(payload);
+    const result = await streamGeneration(payload);
+    const project = result.project;
+
+    if (result.user) {
+      state.user = result.user;
+      localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(result.user));
+      populateProfile();
+      renderGenerationEstimate();
+    }
 
     upsertProject(project);
     state.selectedProjectId = project._id;
