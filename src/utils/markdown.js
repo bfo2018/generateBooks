@@ -28,6 +28,10 @@ function toStructuredParagraphs(markdown) {
     .map((line) => line.trimEnd())
     .filter((line, index, lines) => line || lines[index - 1])
     .map((line) => {
+      const imagePlaceholderMatch = line.match(/^\[IMAGE:\s*(.+?)\]$/i);
+      if (imagePlaceholderMatch) {
+        return { type: "image", text: imagePlaceholderMatch[1] };
+      }
       if (line.startsWith("# ")) {
         return { type: "title", text: line.replace(/^# /, "") };
       }
@@ -36,6 +40,9 @@ function toStructuredParagraphs(markdown) {
       }
       if (line.startsWith("### ")) {
         return { type: "subheading", text: line.replace(/^### /, "") };
+      }
+      if (line.startsWith("- ")) {
+        return { type: "bullet", text: line.replace(/^- /, "") };
       }
       return { type: "body", text: line };
     });
@@ -111,7 +118,24 @@ function structuredParagraphToMarkdown(item) {
     return `### ${item.text}`;
   }
 
+  if (item.type === "image") {
+    return `[IMAGE: ${item.text}]`;
+  }
+
+  if (item.type === "bullet") {
+    return `- ${item.text}`;
+  }
+
   return item.text;
+}
+
+function limitMarkdownToPageCount(markdown, requestedPages = 10, wordsPerPage = 450) {
+  const safePages = Math.max(1, Number(requestedPages) || 10);
+  const items = toStructuredParagraphs(markdown);
+  const pages = paginateStructuredParagraphs(items, wordsPerPage);
+  const limitedItems = pages.slice(0, safePages).flat();
+
+  return limitedItems.map(structuredParagraphToMarkdown).join("\n").trim();
 }
 
 function buildPreviewMarkdown(markdown, previewPageLimit = 3, wordsPerPage = 450) {
@@ -127,6 +151,7 @@ module.exports = {
   buildPreviewMarkdown,
   countWords,
   extractOutline,
+  limitMarkdownToPageCount,
   paginateStructuredParagraphs,
   toStructuredParagraphs,
 };

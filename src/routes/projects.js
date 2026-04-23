@@ -1,7 +1,10 @@
 const express = require("express");
 
 const { requireAuth } = require("./auth");
-const { generateWithConfiguredProvider } = require("../services/aiProviders");
+const {
+  generateWithConfiguredProvider,
+  streamWithConfiguredProvider,
+} = require("../services/aiProviders");
 const {
   createProject,
   getProjectById,
@@ -152,6 +155,89 @@ router.get("/config", async (req, res) => {
 });
 
 router.use(requireAuth);
+
+router.post("/generate/stream", async (req, res) => {
+  const input = normalizeInput(req.body);
+  const userId = String(req.user._id);
+
+  if (!input.topic || !input.documentType) {
+    return res.status(400).json({
+      message: "Topic and document type are required.",
+    });
+  }
+
+  res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+
+  const abortController = new AbortController();
+  req.on("close", () => {
+    abortController.abort();
+  });
+
+  const writeChunk = (payload) => {
+    res.write(`${JSON.stringify(payload)}\n`);
+  };
+
+  try {
+    const existingProjects = await listProjects(userId);
+    const freeGenerationGranted = existingProjects.length === 0;
+    const generated = await streamWithConfiguredProvider(input, {
+      signal: abortController.signal,
+      onDelta: (_delta, accumulated) => {
+        writeChunk({ type: "delta", content: accumulated });
+      },
+    });
+    const outline = extractOutline(generated.content);
+    const usage = normalizeUsage(generated.usage, generated.content);
+    const pricing = calculateProjectPricing({
+      content: generated.content,
+      usage,
+      userCreatedAt: req.user.createdAt,
+      includeImages: input.includeImages,
+      colorMode: input.colorMode,
+      requestedPages: input.requestedPages,
+      freeGenerationGranted,
+      documentType: input.documentType,
+    });
+
+    const project = await createProject({
+      ...input,
+      userId,
+      paperSize: input.paperSize || pricing.paperSize,
+      requestedPages: input.requestedPages,
+      provider: generated.provider,
+      outline,
+      content: generated.content,
+      usage,
+      pricing,
+      payment: {
+        status: freeGenerationGranted ? "paid" : "unpaid",
+        orderId: "",
+        paymentId: "",
+        signature: "",
+        paidAt: freeGenerationGranted ? new Date() : null,
+        amountInr: freeGenerationGranted ? 0 : pricing.totalChargeInr,
+      },
+    });
+
+    writeChunk({
+      type: "final",
+      project: serializeProject(project.toObject ? project.toObject() : project),
+    });
+    return res.end();
+  } catch (error) {
+    if (error.name === "AbortError") {
+      return res.end();
+    }
+
+    writeChunk({
+      type: "error",
+      message: error.message || "Failed to generate project.",
+    });
+    return res.end();
+  }
+});
 
 router.post("/generate", async (req, res) => {
   try {

@@ -3,6 +3,7 @@ const { URL } = require("url");
 
 const { buildBookPrompt } = require("../utils/promptBuilder");
 const { estimateTokenCount } = require("../utils/pricing");
+const { limitMarkdownToPageCount } = require("../utils/markdown");
 
 function requestJson(urlString, options, body) {
   const url = new URL(urlString);
@@ -42,6 +43,85 @@ function requestJson(urlString, options, body) {
     );
 
     req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+function requestSseStream(urlString, options, body, handlers = {}) {
+  const url = new URL(urlString);
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: `${url.pathname}${url.search}`,
+        method: options.method || "POST",
+        headers: options.headers || {},
+      },
+      (res) => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          let raw = "";
+          res.on("data", (chunk) => {
+            raw += chunk;
+          });
+          res.on("end", () => {
+            reject(
+              new Error(`AI provider error ${res.statusCode} from ${url.origin}${url.pathname}: ${raw}`)
+            );
+          });
+          return;
+        }
+
+        let buffer = "";
+
+        res.on("data", (chunk) => {
+          buffer += chunk.toString("utf8");
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          lines.forEach((line) => {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) {
+              return;
+            }
+
+            const payload = trimmed.slice(5).trim();
+
+            if (!payload || payload === "[DONE]") {
+              return;
+            }
+
+            try {
+              handlers.onData?.(JSON.parse(payload));
+            } catch (_error) {
+              // Ignore malformed stream chunks.
+            }
+          });
+        });
+
+        res.on("end", resolve);
+      }
+    );
+
+    req.on("error", reject);
+
+    if (handlers.signal) {
+      const abortListener = () => {
+        const error = new Error("Generation aborted.");
+        error.name = "AbortError";
+        req.destroy(error);
+      };
+
+      if (handlers.signal.aborted) {
+        abortListener();
+        return;
+      }
+
+      handlers.signal.addEventListener("abort", abortListener, { once: true });
+    }
+
     req.write(body);
     req.end();
   });
@@ -358,25 +438,73 @@ function ensureImagePlaceholders(content, input) {
     return content;
   }
 
-  if (/!\[[^\]]+\]\((generated-image:\/\/|https?:\/\/)/i.test(content)) {
+  const lines = String(content || "").split("\n");
+  const imageLines = lines.filter(
+    (line) =>
+      /^\[IMAGE:\s*(.+?)\]$/i.test(line.trim()) ||
+      /^!\[[^\]]+\]\((generated-image:\/\/|https?:\/\/)/i.test(line.trim())
+  );
+
+  if (imageLines.length >= 3) {
     return content;
   }
 
-  const label = input.language === "hindi" ? "चित्र 1" : "Figure 1";
-  const description =
-    input.language === "hindi"
-      ? `${input.topic} के लिए विवरणात्मक विज़ुअल`
-      : `descriptive visual for ${input.topic}`;
-  const placeholderSection = `## ${input.language === "hindi" ? "चित्र प्लेसहोल्डर" : "Image Placeholder"}\n![${label}: ${description}](generated-image://figure-1)`;
-  const lines = String(content || "").split("\n");
-  const insertAt = lines.findIndex((line, index) => index > 0 && line.startsWith("## "));
+  const sectionHeadings = lines
+    .filter((line) => line.startsWith("## ") && !/^##\s*(abstract|table of contents|conclusion)\b/i.test(line))
+    .map((line) => line.replace(/^##\s*/, "").trim());
+  const fallbackDescriptions =
+    sectionHeadings.length > 0
+      ? sectionHeadings.slice(0, 4).map((heading) => `${input.topic} visual for ${heading}`)
+      : [
+          `${input.topic} overview diagram`,
+          `${input.topic} conceptual framework`,
+          `${input.topic} process flow`,
+          `${input.topic} analytical comparison`,
+        ];
 
-  if (insertAt === -1) {
-    return `${content}\n\n${placeholderSection}`;
+  let added = imageLines.length;
+  const result = [...lines];
+
+  for (let index = 0; index < result.length && added < 3; index += 1) {
+    if (!result[index].startsWith("## ")) {
+      continue;
+    }
+
+    const description = fallbackDescriptions[added] || `${input.topic} supporting visual ${added + 1}`;
+    result.splice(
+      index + 1,
+      0,
+      `[IMAGE: ${description}]`,
+      `Caption: ${description}.`,
+      "Relevance: This image supports the discussion in this section.",
+      ""
+    );
+    added += 1;
+    index += 4;
   }
 
-  lines.splice(insertAt, 0, "", placeholderSection, "");
-  return lines.join("\n");
+  while (added < 3) {
+    const description = fallbackDescriptions[added] || `${input.topic} supporting visual ${added + 1}`;
+    result.push("", `[IMAGE: ${description}]`, `Caption: ${description}.`, "Relevance: This image supports the topic.");
+    added += 1;
+  }
+
+  if (added < 4 && input.colorMode === "color") {
+    const description = fallbackDescriptions[added] || `${input.topic} summary visual`;
+    result.push(
+      "",
+      `[IMAGE: ${description}]`,
+      `Caption: ${description}.`,
+      "Relevance: This image provides an additional visual summary."
+    );
+  }
+
+  return result.join("\n");
+}
+
+function finalizeGeneratedContent(content, input) {
+  const withImages = ensureImagePlaceholders(content, input);
+  return limitMarkdownToPageCount(withImages, input.requestedPages, 450);
 }
 
 async function generateWithConfiguredProvider(input) {
@@ -384,7 +512,7 @@ async function generateWithConfiguredProvider(input) {
   const prompt = buildBookPrompt(input);
 
   if (provider === "mock") {
-    const content = buildMockBook(input);
+    const content = finalizeGeneratedContent(buildMockBook(input), input);
 
     return {
       provider,
@@ -438,7 +566,7 @@ async function generateWithConfiguredProvider(input) {
     throw new Error("AI response did not include message content.");
   }
 
-  const normalizedContent = ensureImagePlaceholders(content, input);
+  const normalizedContent = finalizeGeneratedContent(content, input);
 
   return {
     provider,
@@ -455,6 +583,89 @@ async function generateWithConfiguredProvider(input) {
   };
 }
 
+async function streamWithConfiguredProvider(input, handlers = {}) {
+  const provider = (process.env.AI_PROVIDER || "mock").toLowerCase();
+  const prompt = buildBookPrompt(input);
+
+  if (provider === "mock") {
+    const content = finalizeGeneratedContent(buildMockBook(input), input);
+    handlers.onDelta?.(content, content);
+    return {
+      provider,
+      content,
+      usage: {
+        promptTokens: estimateTokenCount(prompt),
+        completionTokens: estimateTokenCount(content),
+        totalTokens: estimateTokenCount(prompt) + estimateTokenCount(content),
+        source: "estimated",
+      },
+    };
+  }
+
+  const apiKey = process.env.AI_API_KEY;
+  const apiUrl = resolveApiUrl(provider, process.env.AI_API_URL);
+  const model = process.env.AI_MODEL;
+
+  if (!apiKey || !apiUrl || !model) {
+    throw new Error(
+      "AI provider is configured, but AI_API_KEY, AI_API_URL, or AI_MODEL is missing."
+    );
+  }
+
+  const payload = JSON.stringify({
+    model,
+    messages: [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    temperature: 0.7,
+    stream: true,
+  });
+
+  let accumulated = "";
+
+  await requestSseStream(
+    apiUrl,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(payload),
+        Authorization: `Bearer ${apiKey}`,
+      },
+    },
+    payload,
+    {
+      signal: handlers.signal,
+      onData: (frame) => {
+        const delta = frame?.choices?.[0]?.delta?.content || "";
+        if (!delta) {
+          return;
+        }
+
+        accumulated += delta;
+        handlers.onDelta?.(delta, accumulated);
+      },
+    }
+  );
+
+  const normalizedContent = finalizeGeneratedContent(accumulated, input);
+
+  return {
+    provider,
+    content: normalizedContent,
+    usage: {
+      promptTokens: estimateTokenCount(prompt),
+      completionTokens: estimateTokenCount(normalizedContent),
+      totalTokens: estimateTokenCount(prompt) + estimateTokenCount(normalizedContent),
+      source: "estimated",
+    },
+  };
+}
+
 module.exports = {
   generateWithConfiguredProvider,
+  streamWithConfiguredProvider,
 };

@@ -198,6 +198,70 @@ function resetGenerationState() {
   elements.stopGenerateButton.hidden = true;
 }
 
+async function streamGeneration(payload) {
+  const response = await fetch(buildApiUrl("/api/projects/generate/stream"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${state.token}`,
+    },
+    body: JSON.stringify(payload),
+    signal: state.generation.controller.signal,
+  });
+
+  if (!response.ok) {
+    const contentType = response.headers.get("content-type") || "";
+    const data = contentType.includes("application/json")
+      ? await response.json().catch(() => ({ message: "Request failed." }))
+      : { message: "Request failed." };
+    throw new Error(data.message || "Request failed.");
+  }
+
+  if (!response.body) {
+    throw new Error("Streaming response is not available.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalProject = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const chunk = JSON.parse(trimmed);
+
+      if (chunk.type === "delta") {
+        renderGeneratingPreview(payload.topic, chunk.content || "", payload.paperSize, payload.colorMode);
+      } else if (chunk.type === "final") {
+        finalProject = chunk.project;
+      } else if (chunk.type === "error") {
+        throw new Error(chunk.message || "Failed to generate project.");
+      }
+    }
+  }
+
+  if (!finalProject) {
+    throw new Error("Generation finished without a saved project.");
+  }
+
+  return finalProject;
+}
+
 async function api(url, options = {}) {
   const headers = {
     "Content-Type": "application/json",
@@ -352,7 +416,7 @@ function renderPageItem(item) {
     return `
       <figure class="generated-image-card">
         <div class="generated-image-art ${item.variant || "standard"}">
-          <span>${item.variant === "color" ? "Color visual" : "Visual concept"}</span>
+          <span>${escapeHtml(item.text)}</span>
         </div>
         <figcaption>${escapeHtml(item.text)}</figcaption>
       </figure>
@@ -845,7 +909,7 @@ async function handleLogin(event) {
     } catch (error) {
       renderShell();
       closeAuthModal();
-      showToast(error.message || "Login succeeded, but we could not load your account fully yet.");
+      showToast("Login succeeded, but some account data is still loading.");
       return;
     }
 
@@ -881,7 +945,7 @@ async function handleRegister(event) {
     } catch (error) {
       renderShell();
       closeAuthModal();
-      showToast(error.message || "Account created, but we could not load your profile fully yet.");
+      showToast("Account created and login succeeded, but some data is still loading.");
       elements.registerForm.reset();
       return;
     }
@@ -982,16 +1046,11 @@ async function handleGenerate(event) {
       colorMode: elements.colorMode.value,
     };
 
-    const project = await api("/api/projects/generate", {
-      method: "POST",
-      body: JSON.stringify(payload),
-      signal: state.generation.controller.signal,
-    });
+    const project = await streamGeneration(payload);
 
     upsertProject(project);
     state.selectedProjectId = project._id;
     localStorage.setItem(STORAGE_KEYS.selectedProjectId, project._id);
-    await revealProjectContent(project);
     selectProject(project._id);
 
     try {
