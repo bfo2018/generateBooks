@@ -6,10 +6,24 @@ const state = {
   paymentKeyId: "",
   pricingConfig: null,
   projects: [],
-  selectedProjectId: null,
-  currentView: "workspace",
+  selectedProjectId: localStorage.getItem("bookforge-selected-project-id") || null,
+  currentView: localStorage.getItem("bookforge-current-view") || "workspace",
   authMode: "login",
   authReady: false,
+  generation: {
+    controller: null,
+    revealTimer: null,
+    active: false,
+    stopping: false,
+  },
+};
+
+const STORAGE_KEYS = {
+  token: "bookforge-token",
+  user: "bookforge-user",
+  draft: "bookforge-draft",
+  selectedProjectId: "bookforge-selected-project-id",
+  currentView: "bookforge-current-view",
 };
 
 const appConfig = window.APP_CONFIG || {};
@@ -38,18 +52,19 @@ const elements = {
   profileForm: document.getElementById("profileForm"),
   generatorForm: document.getElementById("generatorForm"),
   generateButton: document.getElementById("generateButton"),
+  regenerateButton: document.getElementById("regenerateButton"),
+  stopGenerateButton: document.getElementById("stopGenerateButton"),
   refreshProjects: document.getElementById("refreshProjects"),
   projectList: document.getElementById("projectList"),
   providerBadge: document.getElementById("providerBadge"),
   paymentBadge: document.getElementById("paymentBadge"),
   trialBadge: document.getElementById("trialBadge"),
-  contentEditor: document.getElementById("contentEditor"),
-  saveButton: document.getElementById("saveButton"),
   unlockButton: document.getElementById("unlockButton"),
   downloadDocx: document.getElementById("downloadDocx"),
   downloadPdf: document.getElementById("downloadPdf"),
   editorTitle: document.getElementById("editorTitle"),
   editorMeta: document.getElementById("editorMeta"),
+  generationStatus: document.getElementById("generationStatus"),
   toast: document.getElementById("toast"),
   topic: document.getElementById("topic"),
   description: document.getElementById("description"),
@@ -126,6 +141,63 @@ function setLoader(visible, title, text) {
   if (text) elements.loaderText.textContent = text;
 }
 
+function setGenerationStatus(message = "", visible = false) {
+  if (!elements.generationStatus) return;
+  elements.generationStatus.textContent = message;
+  elements.generationStatus.hidden = !visible || !message;
+}
+
+function persistDraft() {
+  const draft = {
+    topic: elements.topic.value,
+    description: elements.description.value,
+    documentType: elements.documentType.value,
+    language: elements.language.value,
+    paperSize: elements.paperSize.value,
+    requestedPages: getRequestedPagesValue(),
+    colorMode: elements.colorMode.value,
+    includeImages: elements.includeImages.checked,
+  };
+
+  localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(draft));
+}
+
+function restoreDraft() {
+  const raw = localStorage.getItem(STORAGE_KEYS.draft);
+  if (!raw) return;
+
+  try {
+    const draft = JSON.parse(raw);
+    elements.topic.value = draft.topic || "";
+    elements.description.value = draft.description || "";
+    elements.documentType.value = draft.documentType || "book";
+    elements.language.value = draft.language || "english";
+    elements.paperSize.value = draft.paperSize || getPaperSizeForType(elements.documentType.value);
+    elements.requestedPages.value = String(draft.requestedPages || 10);
+    elements.colorMode.value = draft.colorMode || "standard";
+    elements.includeImages.checked = Boolean(draft.includeImages);
+  } catch (_error) {
+    localStorage.removeItem(STORAGE_KEYS.draft);
+  }
+}
+
+function clearRevealTimer() {
+  if (state.generation.revealTimer) {
+    clearTimeout(state.generation.revealTimer);
+    state.generation.revealTimer = null;
+  }
+}
+
+function resetGenerationState() {
+  clearRevealTimer();
+  state.generation.controller = null;
+  state.generation.active = false;
+  state.generation.stopping = false;
+  elements.generateButton.disabled = false;
+  elements.regenerateButton.disabled = false;
+  elements.stopGenerateButton.hidden = true;
+}
+
 async function api(url, options = {}) {
   const headers = {
     "Content-Type": "application/json",
@@ -185,16 +257,17 @@ function clearSession() {
   state.user = null;
   state.projects = [];
   state.selectedProjectId = null;
-  localStorage.removeItem("bookforge-token");
-  localStorage.removeItem("bookforge-user");
+  localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem(STORAGE_KEYS.user);
+  localStorage.removeItem(STORAGE_KEYS.selectedProjectId);
   populateProfile();
 }
 
 function saveSession(token, user) {
   state.token = token;
   state.user = user;
-  localStorage.setItem("bookforge-token", token);
-  localStorage.setItem("bookforge-user", JSON.stringify(user || null));
+  localStorage.setItem(STORAGE_KEYS.token, token);
+  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user || null));
   populateProfile();
 }
 
@@ -236,18 +309,21 @@ function renderGenerationEstimate() {
       ? Number(state.pricingConfig.colorImageChargeInr || 0)
       : 0;
   const totalEstimate = tokenCostInr + imageChargeInr;
+  const firstDocumentFree = hasSessionToken() && state.projects.length === 0;
 
   if (!getSelectedProject()) {
-    elements.pricingTotal.textContent = formatMoney(totalEstimate);
+    elements.pricingTotal.textContent = formatMoney(firstDocumentFree ? 0 : totalEstimate);
     elements.tokenUsage.textContent = String(estimatedTotalTokens);
     elements.pageEstimate.textContent = String(requestedPages);
     elements.paperSizeLabel.textContent = elements.paperSize.value || "A4";
-    elements.accessState.textContent = "Estimate";
+    elements.accessState.textContent = firstDocumentFree ? "Free" : "Estimate";
   }
 
-  elements.pricingHint.textContent = `Estimated for ${requestedPages} pages: token ${formatMoney(
-    tokenCostInr
-  )} + image charge ${formatMoney(imageChargeInr)}. More pages increase cost.`;
+  elements.pricingHint.textContent = firstDocumentFree
+    ? `Your first generated document is free. Requested ${requestedPages} pages will be unlocked for preview and download.`
+    : `Estimated for ${requestedPages} pages: token ${formatMoney(
+        tokenCostInr
+      )} + image charge ${formatMoney(imageChargeInr)}. More pages increase cost.`;
 }
 
 function splitMarkdownLines(markdown) {
@@ -315,6 +391,7 @@ function closeAuthModal() {
 
 function renderShell() {
   const loggedIn = hasSessionToken();
+  localStorage.setItem(STORAGE_KEYS.currentView, state.currentView);
   elements.guestActions.hidden = loggedIn;
   elements.userActions.hidden = !loggedIn;
   elements.navAccount.hidden = !loggedIn;
@@ -365,12 +442,12 @@ function updateActionButtons() {
   const hasProject = Boolean(project);
   const loggedIn = hasSessionToken();
 
-  elements.saveButton.disabled = !loggedIn || !isPaid;
   elements.unlockButton.disabled = !loggedIn || !hasProject || isPaid;
   elements.downloadDocx.disabled = !loggedIn || !isPaid;
   elements.downloadPdf.disabled = !loggedIn || !isPaid;
   elements.lockAction.disabled = !loggedIn || !hasProject || isPaid;
   elements.generateButton.textContent = loggedIn ? "Generate Document" : "Login to Generate";
+  elements.regenerateButton.disabled = !loggedIn || state.generation.active;
 }
 
 function renderProjects() {
@@ -442,11 +519,20 @@ function toStructuredPreviewItems(markdown, colorMode = "standard") {
     .filter((line, index, lines) => line || lines[index - 1])
     .map((line) => {
       const imageMatch = line.match(/^!\[([^\]]+)\]\(([^)]+)\)$/);
+      const placeholderMatch = line.match(/^\[IMAGE:\s*(.+?)\]$/i);
       if (imageMatch) {
         return {
           type: "image",
           text: imageMatch[1],
           src: imageMatch[2],
+          variant: colorMode === "color" ? "color" : "standard",
+        };
+      }
+      if (placeholderMatch) {
+        return {
+          type: "image",
+          text: placeholderMatch[1],
+          src: `generated-image://${placeholderMatch[1]}`,
           variant: colorMode === "color" ? "color" : "standard",
         };
       }
@@ -489,15 +575,18 @@ function renderPricing(project) {
   const pricing = project?.pricing || {};
   const isPaid = project?.payment?.status === "paid";
   const requestedPages = project?.requestedPages || pricing.requestedPages || pricing.estimatedPages || 0;
+  const firstFree = Boolean(pricing.freeGenerationGranted);
 
   elements.pricingTotal.textContent = formatMoney(pricing.totalChargeInr || 0);
-  elements.pricingHint.textContent = `Token ${formatMoney(pricing.tokenCostInr || 0)} + platform ${formatMoney(
-    pricing.platformFeeInr || 0
-  )} + image charge ${formatMoney(pricing.imageChargeInr || 0)} for requested ${requestedPages} pages`;
+  elements.pricingHint.textContent = firstFree
+    ? `First generated document is free. Requested ${requestedPages} pages can be previewed and downloaded without payment.`
+    : `Token ${formatMoney(pricing.tokenCostInr || 0)} + platform ${formatMoney(
+        pricing.platformFeeInr || 0
+      )} + image charge ${formatMoney(pricing.imageChargeInr || 0)} for requested ${requestedPages} pages`;
   elements.tokenUsage.textContent = String(project?.usage?.totalTokens || 0);
   elements.pageEstimate.textContent = String(requestedPages || pricing.estimatedPages || 0);
   elements.paperSizeLabel.textContent = project?.paperSize || pricing.paperSize || "A4";
-  elements.accessState.textContent = isPaid ? "Unlocked" : "Locked";
+  elements.accessState.textContent = firstFree ? "Free" : isPaid ? "Unlocked" : "Locked";
   elements.lockMessage.textContent = isPaid
     ? "Full document access is enabled."
     : `Only ${pricing.previewPageLimit || 3} preview pages are visible until payment clears.`;
@@ -566,18 +655,57 @@ function renderPreview(project) {
   elements.lockCard.hidden = project.payment?.status === "paid" || !project.hasLockedContent;
 }
 
-function renderEditor(project) {
-  if (!project) {
-    elements.contentEditor.value = "";
-    elements.contentEditor.disabled = true;
-    elements.contentEditor.hidden = true;
-    return;
-  }
+function renderGeneratingPreview(topic, partialContent, paperSize, colorMode) {
+  const items = toStructuredPreviewItems(partialContent || "", colorMode);
+  const body = items.length
+    ? items.map(renderPageItem).join("")
+    : "<p class=\"muted\">Preparing your draft...</p>";
 
-  const isPaid = project.payment?.status === "paid";
-  elements.contentEditor.disabled = !isPaid;
-  elements.contentEditor.hidden = !isPaid;
-  elements.contentEditor.value = isPaid ? project.content || "" : "";
+  elements.previewContainer.innerHTML = `
+    <article class="preview-page">
+      <div class="preview-page-header">
+        <span>${escapeHtml(topic || "Generating")}</span>
+        <span>${escapeHtml(paperSize || "A4")}</span>
+      </div>
+      ${body}
+    </article>
+  `;
+  elements.lockCard.hidden = true;
+}
+
+function revealProjectContent(project) {
+  return new Promise((resolve) => {
+    const source = String(project.content || project.previewContent || "").replace(/\r\n/g, "\n");
+    const lines = source.split("\n");
+    let index = 0;
+    let partial = "";
+
+    function step() {
+      if (state.generation.stopping) {
+        resetGenerationState();
+        setGenerationStatus("Generation stopped.", true);
+        return resolve();
+      }
+
+      if (index >= lines.length) {
+        renderPreview(project);
+        setGenerationStatus("Document ready.", true);
+        resetGenerationState();
+        return resolve();
+      }
+
+      partial += `${lines[index]}${index < lines.length - 1 ? "\n" : ""}`;
+      renderGeneratingPreview(project.topic, partial, project.paperSize, project.colorMode);
+      index += 1;
+      state.generation.revealTimer = setTimeout(step, 55);
+    }
+
+    step();
+  });
+}
+
+function renderEditor(project) {
+  return project;
 }
 
 function selectProject(projectId) {
@@ -585,6 +713,7 @@ function selectProject(projectId) {
   if (!project) return;
 
   state.selectedProjectId = projectId;
+  localStorage.setItem(STORAGE_KEYS.selectedProjectId, projectId);
   elements.topic.value = project.topic || "";
   elements.description.value = project.description || "";
   elements.documentType.value = project.documentType || "book";
@@ -600,6 +729,7 @@ function selectProject(projectId) {
   renderEditor(project);
   renderProjects();
   updateActionButtons();
+  persistDraft();
 }
 
 function upsertProject(project) {
@@ -636,6 +766,7 @@ async function loadProjects() {
   if (!hasSessionToken()) {
     state.projects = [];
     state.selectedProjectId = null;
+    localStorage.removeItem(STORAGE_KEYS.selectedProjectId);
     renderSummary({});
     renderProjects();
     renderPreview(null);
@@ -651,6 +782,7 @@ async function loadProjects() {
 
   if (!state.projects.length) {
     state.selectedProjectId = null;
+    localStorage.removeItem(STORAGE_KEYS.selectedProjectId);
     elements.editorTitle.textContent = "Generated Content";
     elements.editorMeta.textContent = "Generate a document to start editing.";
     renderPricing(null);
@@ -828,8 +960,15 @@ async function handleGenerate(event) {
     return;
   }
 
+  resetGenerationState();
+  persistDraft();
+  state.generation.controller = new AbortController();
+  state.generation.active = true;
   elements.generateButton.disabled = true;
-  setLoader(true, "Generating your document", "Creating content, preview pages, and pricing details.");
+  elements.regenerateButton.disabled = true;
+  elements.stopGenerateButton.hidden = false;
+  setGenerationStatus("Generating your document line by line...", true);
+  renderGeneratingPreview(elements.topic.value, "", elements.paperSize.value, elements.colorMode.value);
 
   try {
     const payload = {
@@ -846,9 +985,13 @@ async function handleGenerate(event) {
     const project = await api("/api/projects/generate", {
       method: "POST",
       body: JSON.stringify(payload),
+      signal: state.generation.controller.signal,
     });
 
     upsertProject(project);
+    state.selectedProjectId = project._id;
+    localStorage.setItem(STORAGE_KEYS.selectedProjectId, project._id);
+    await revealProjectContent(project);
     selectProject(project._id);
 
     try {
@@ -863,42 +1006,29 @@ async function handleGenerate(event) {
       );
     }
   } catch (error) {
-    showToast(error.message);
+    if (error.name === "AbortError") {
+      setGenerationStatus("Generation stopped.", true);
+      showToast("Generation stopped.");
+    } else {
+      showToast(error.message);
+    }
   } finally {
-    elements.generateButton.disabled = false;
-    setLoader(false);
+    resetGenerationState();
   }
 }
 
-async function handleSave() {
-  if (!requireLoginForAction("Please login before saving.")) {
+function handleRegenerate() {
+  if (state.generation.active) {
     return;
   }
 
-  const project = getSelectedProject();
-  if (!project || project.payment?.status !== "paid") return;
+  elements.generatorForm.requestSubmit();
+}
 
-  try {
-    const updated = await api(`/api/projects/${project._id}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        topic: elements.topic.value,
-        description: elements.description.value,
-        documentType: elements.documentType.value,
-        language: elements.language.value,
-        paperSize: elements.paperSize.value,
-        requestedPages: getRequestedPagesValue(),
-        includeImages: elements.includeImages.checked,
-        colorMode: elements.colorMode.value,
-        content: elements.contentEditor.value,
-      }),
-    });
-
-    upsertProject(updated);
-    selectProject(updated._id);
-    showToast("Document saved.");
-  } catch (error) {
-    showToast(error.message);
+function handleStopGenerate() {
+  state.generation.stopping = true;
+  if (state.generation.controller) {
+    state.generation.controller.abort();
   }
 }
 
@@ -1020,6 +1150,7 @@ async function handleDownload(kind) {
 
 function handleDocumentTypeChange() {
   elements.paperSize.value = getPaperSizeForType(elements.documentType.value);
+  persistDraft();
   renderGenerationEstimate();
 }
 
@@ -1044,7 +1175,8 @@ function bindEvents() {
   elements.topLogoutButton.addEventListener("click", handleLogout);
   elements.refreshProjects.addEventListener("click", loadProjects);
   elements.generatorForm.addEventListener("submit", handleGenerate);
-  elements.saveButton.addEventListener("click", handleSave);
+  elements.regenerateButton.addEventListener("click", handleRegenerate);
+  elements.stopGenerateButton.addEventListener("click", handleStopGenerate);
   elements.unlockButton.addEventListener("click", handleUnlock);
   elements.lockAction.addEventListener("click", handleUnlock);
   elements.downloadDocx.addEventListener("click", () => handleDownload("docx"));
@@ -1053,6 +1185,19 @@ function bindEvents() {
   elements.requestedPages.addEventListener("input", renderGenerationEstimate);
   elements.colorMode.addEventListener("change", renderGenerationEstimate);
   elements.includeImages.addEventListener("change", renderGenerationEstimate);
+  [
+    elements.topic,
+    elements.description,
+    elements.documentType,
+    elements.language,
+    elements.requestedPages,
+    elements.colorMode,
+    elements.includeImages,
+  ].forEach((element) => {
+    const eventName =
+      element.type === "checkbox" || element.tagName === "SELECT" ? "change" : "input";
+    element.addEventListener(eventName, persistDraft);
+  });
   elements.navWorkspace.addEventListener("click", showWorkspaceView);
   elements.navAccount.addEventListener("click", showAccountView);
   elements.openLoginButton.addEventListener("click", () => openAuthModal("login"));
@@ -1067,7 +1212,10 @@ function bindEvents() {
 async function init() {
   bindEvents();
   populateProfile();
-  elements.requestedPages.value = "10";
+  restoreDraft();
+  if (!elements.requestedPages.value) {
+    elements.requestedPages.value = "10";
+  }
   handleDocumentTypeChange();
   renderShell();
   renderProjects();

@@ -134,9 +134,17 @@
                 If the customer is not logged in, this button opens login first.
               </p>
 
-              <button id="generateButton" class="primary-button" type="submit">
-                Generate Document
-              </button>
+              <div class="generator-actions">
+                <button id="generateButton" class="primary-button" type="submit">
+                  Generate Document
+                </button>
+                <button id="regenerateButton" class="ghost-button" type="button">
+                  Regenerate
+                </button>
+                <button id="stopGenerateButton" class="ghost-button danger-button" type="button" hidden>
+                  Stop
+                </button>
+              </div>
             </form>
 
             <section class="panel editor-panel">
@@ -146,11 +154,9 @@
                   <p id="editorMeta" class="muted">
                     Generate a document to preview it here.
                   </p>
+                  <p id="generationStatus" class="muted generation-status" hidden></p>
                 </div>
                 <div class="action-row">
-                  <button id="saveButton" class="ghost-button inline-button" type="button" disabled>
-                    Save
-                  </button>
                   <button id="unlockButton" class="primary-button inline-button" type="button" disabled>
                     Pay & Unlock
                   </button>
@@ -217,12 +223,6 @@
                   Pay & Unlock
                 </button>
               </div>
-
-              <textarea
-                id="contentEditor"
-                class="content-editor"
-                placeholder="Generated content appears here..."
-              ></textarea>
             </section>
           </section>
         </section>

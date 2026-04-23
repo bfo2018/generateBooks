@@ -92,15 +92,19 @@ function buildBookPrompt({
   const blueprint = getDocumentBlueprint(documentType);
   const normalizedDescription = String(description || "");
   const imageInstruction = includeImages
-    ? `Also include short figure suggestions and image captions suitable for a ${colorMode} file. Treat visuals as ${colorMode === "color" ? "full-color" : "standard"} illustrations. Add at least one Markdown image placeholder in this exact pattern: ![Figure 1: short visual description](generated-image://figure-1)`
-    : "Do not include image prompts or figure captions.";
+    ? `Image Mode is ON. Include 3 to 4 relevant images evenly distributed across the document, not all in one place. For each image, add a clear caption, a short explanation of its relevance, and an image placeholder in this exact format: [IMAGE: description of the image]`
+    : "Image Mode is OFF. Do not include image placeholders, figure captions, or image explanations.";
+  const colorInstruction =
+    colorMode === "color"
+      ? "Color Mode is ON. Use visually structured formatting with clear headings, emphasized key terms, section labels, and an engaging academic layout."
+      : "Color Mode is OFF. Keep the document clean, text-first, and academically structured without extra visual emphasis.";
   const safeRequestedPages = Math.max(1, Number(requestedPages) || 10);
   const pageLimitInstruction = normalizedDescription.match(/\b(?:max(?:imum)?|up to)\s*\d+\s*pages?\b/i)
     ? getPageLimitInstruction(normalizedDescription)
     : `Target about ${safeRequestedPages} pages in the final document.`;
 
   return `
-You are an expert academic writer and publishing assistant.
+You are an AI assistant that generates structured academic books and research-style documents.
 Create a structured ${blueprint.label} on the topic "${topic}".
 
 Topic description:
@@ -114,13 +118,19 @@ Use a ${paperSize || "A4"} page layout as the intended output format.
 
 Formatting rules:
 1. Return Markdown only.
-2. Start with a short title using "# ".
-3. Use the following major structure as guidance: ${blueprint.sections.join(", ")}.
-4. ${blueprint.instructions.join(" ")}
-5. Keep the writing coherent, useful, and ready for export.
-6. ${pageLimitInstruction}
-7. ${imageInstruction}
-8. Do not include code fences.
+2. Maintain a formal academic tone throughout.
+3. Start with a title using "# ".
+4. Include an "## Abstract" section near the beginning.
+5. Include an "## Table of Contents" section after the abstract.
+6. Use the following major structure as guidance: ${blueprint.sections.join(", ")}.
+7. ${blueprint.instructions.join(" ")}
+8. Keep the writing coherent, clear, deep, and ready for export.
+9. ${pageLimitInstruction}
+10. ${colorInstruction}
+11. ${imageInstruction}
+12. If both image mode and color mode are off, produce a clean text-only academic document.
+13. Do not mention these instructions in the output.
+14. Do not include code fences.
 `.trim();
 }
 

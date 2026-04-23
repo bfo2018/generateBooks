@@ -156,6 +156,7 @@ router.use(requireAuth);
 router.post("/generate", async (req, res) => {
   try {
     const input = normalizeInput(req.body);
+    const userId = String(req.user._id);
 
     if (!input.topic || !input.documentType) {
       return res.status(400).json({
@@ -163,6 +164,8 @@ router.post("/generate", async (req, res) => {
       });
     }
 
+    const existingProjects = await listProjects(userId);
+    const freeGenerationGranted = existingProjects.length === 0;
     const generated = await generateWithConfiguredProvider(input);
     const outline = extractOutline(generated.content);
     const usage = normalizeUsage(generated.usage, generated.content);
@@ -173,12 +176,13 @@ router.post("/generate", async (req, res) => {
       includeImages: input.includeImages,
       colorMode: input.colorMode,
       requestedPages: input.requestedPages,
+      freeGenerationGranted,
       documentType: input.documentType,
     });
 
     const project = await createProject({
       ...input,
-      userId: String(req.user._id),
+      userId,
       paperSize: input.paperSize || pricing.paperSize,
       requestedPages: input.requestedPages,
       provider: generated.provider,
@@ -187,12 +191,12 @@ router.post("/generate", async (req, res) => {
       usage,
       pricing,
       payment: {
-        status: "unpaid",
+        status: freeGenerationGranted ? "paid" : "unpaid",
         orderId: "",
         paymentId: "",
         signature: "",
-        paidAt: null,
-        amountInr: pricing.totalChargeInr,
+        paidAt: freeGenerationGranted ? new Date() : null,
+        amountInr: freeGenerationGranted ? 0 : pricing.totalChargeInr,
       },
     });
 

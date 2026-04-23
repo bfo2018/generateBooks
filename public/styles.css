@@ -281,11 +281,20 @@ textarea:focus {
   font-size: 0.94rem;
 }
 
-.content-editor {
-  min-height: 320px;
-  line-height: 1.6;
-  margin-top: 18px;
-  resize: vertical;
+.generator-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.generation-status {
+  margin: 8px 0 0;
+}
+
+.danger-button {
+  background: rgba(142, 57, 33, 0.12);
+  color: #8e3921;
 }
 
 .primary-button,
@@ -674,7 +683,8 @@ textarea:focus {
   .form-grid,
   .history-grid,
   .billing-grid,
-  .billing-panel {
+  .billing-panel,
+  .generator-actions {
     grid-template-columns: 1fr;
   }
 

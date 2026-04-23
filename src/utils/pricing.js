@@ -86,6 +86,7 @@ function calculateProjectPricing({
   includeImages = false,
   colorMode = "standard",
   requestedPages = 10,
+  freeGenerationGranted = false,
   documentType = "book",
 }) {
   const config = getPricingConfig();
@@ -100,8 +101,14 @@ function calculateProjectPricing({
     toStructuredParagraphs(content),
     config.wordsPerPage
   );
-  const platformFeeInr = isWithinFreeTrial(userCreatedAt) ? 0 : config.platformFeeInr;
-  const imageChargeInr = includeImages && colorMode === "color" ? config.imageChargeInr : 0;
+  const platformFeeInr = freeGenerationGranted
+    ? 0
+    : isWithinFreeTrial(userCreatedAt)
+      ? 0
+      : config.platformFeeInr;
+  const imageChargeInr =
+    freeGenerationGranted ? 0 : includeImages && colorMode === "color" ? config.imageChargeInr : 0;
+  const effectiveTokenCostInr = freeGenerationGranted ? 0 : tokenCostInr;
 
   return {
     currency: config.currency,
@@ -112,12 +119,13 @@ function calculateProjectPricing({
     inputCostPer1kTokensInr: Number(config.inputCostPer1kTokensInr.toFixed(4)),
     outputCostPer1kTokensInr: Number(config.outputCostPer1kTokensInr.toFixed(4)),
     imageChargeInr: Number(imageChargeInr.toFixed(2)),
-    tokenCostInr: Number(tokenCostInr.toFixed(2)),
-    totalChargeInr: Number((tokenCostInr + platformFeeInr + imageChargeInr).toFixed(2)),
+    tokenCostInr: Number(effectiveTokenCostInr.toFixed(2)),
+    totalChargeInr: Number((effectiveTokenCostInr + platformFeeInr + imageChargeInr).toFixed(2)),
     wordCount: countWords(content),
     estimatedPages: paragraphPages.length || 1,
     requestedPages: Math.max(1, Number(requestedPages) || 10),
     paperSize: getDefaultPaperSize(documentType),
+    freeGenerationGranted: Boolean(freeGenerationGranted),
     freeTrialActive: isWithinFreeTrial(userCreatedAt),
     previewContent: buildPreviewMarkdown(
       content,
