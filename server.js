@@ -18,6 +18,33 @@ function getAllowedOrigins() {
     .filter(Boolean);
 }
 
+function normalizeOriginValue(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function matchAllowedOrigin(origin, allowedOrigin) {
+  const normalizedOrigin = normalizeOriginValue(origin);
+  const normalizedAllowedOrigin = normalizeOriginValue(allowedOrigin);
+
+  if (!normalizedOrigin || !normalizedAllowedOrigin) {
+    return false;
+  }
+
+  if (normalizedAllowedOrigin === "*") {
+    return true;
+  }
+
+  if (!normalizedAllowedOrigin.includes("*")) {
+    return normalizedAllowedOrigin === normalizedOrigin;
+  }
+
+  const escapedPattern = normalizedAllowedOrigin
+    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*");
+
+  return new RegExp(`^${escapedPattern}$`, "i").test(normalizedOrigin);
+}
+
 function isOriginAllowed(origin, allowedOrigins) {
   if (!origin) {
     return false;
@@ -27,11 +54,11 @@ function isOriginAllowed(origin, allowedOrigins) {
     return true;
   }
 
-  return allowedOrigins.includes("*") || allowedOrigins.includes(origin);
+  return allowedOrigins.some((allowedOrigin) => matchAllowedOrigin(origin, allowedOrigin));
 }
 
 app.use((req, res, next) => {
-  const origin = String(req.headers.origin || "");
+  const origin = normalizeOriginValue(req.headers.origin || "");
   const allowedOrigins = getAllowedOrigins();
   const originAllowed = isOriginAllowed(origin, allowedOrigins);
 
@@ -40,11 +67,16 @@ app.use((req, res, next) => {
 
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin, Access-Control-Request-Headers");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      requestedHeaders || "Content-Type, Authorization, X-Requested-With"
+      requestedHeaders || "Content-Type, Authorization, X-Requested-With, Accept"
     );
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "Content-Disposition, Content-Length, Content-Type"
+    );
     res.setHeader("Access-Control-Max-Age", "86400");
   }
 
