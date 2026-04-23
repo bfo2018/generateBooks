@@ -13,6 +13,11 @@ const {
 } = require("../store/projectStore");
 const { incrementUserGeneratedCount } = require("../store/userStore");
 const { createDocxBuffer, createPdfBuffer } = require("../utils/exporters");
+const {
+  createSignedExportPayload,
+  getExportUrlTtlSeconds,
+  verifySignedExportPayload,
+} = require("../utils/exportTokens");
 const { extractOutline } = require("../utils/markdown");
 const {
   createPaymentOrder,
@@ -105,6 +110,72 @@ async function loadProjectOr404(req, res) {
 
   return project;
 }
+
+async function sendProjectExport(res, project, kind) {
+  if (project.payment?.status !== "paid") {
+    return res.status(402).json({
+      message: "Pay and unlock the document before downloading exports.",
+      pricing: project.pricing,
+    });
+  }
+
+  const safeKind = String(kind || "").toLowerCase();
+  const fileBase = project.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "document";
+  const fileName = `${fileBase}.${safeKind}`;
+
+  if (safeKind === "docx") {
+    const buffer = await createDocxBuffer(project.content);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return res.send(buffer);
+  }
+
+  if (safeKind === "pdf") {
+    const buffer = await createPdfBuffer(project.content, {
+      paperSize: project.paperSize || "A4",
+    });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return res.send(buffer);
+  }
+
+  return res.status(400).json({ message: "Unsupported export format." });
+}
+
+router.get("/signed-export/:id/:kind", async (req, res) => {
+  try {
+    const projectId = String(req.params.id || "").trim();
+    const kind = String(req.params.kind || "").trim().toLowerCase();
+    const expiresAt = Number(req.query.expiresAt);
+    const signature = String(req.query.signature || "").trim();
+
+    const valid = verifySignedExportPayload({
+      projectId,
+      kind,
+      expiresAt,
+      signature,
+    });
+
+    if (!valid) {
+      return res.status(401).json({ message: "Export link is invalid or expired." });
+    }
+
+    const project = await getProjectById(projectId);
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found." });
+    }
+
+    return sendProjectExport(res, project, kind);
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message || "Failed to export project.",
+    });
+  }
+});
 
 router.get("/", async (req, res) => {
   try {
@@ -467,12 +538,18 @@ router.post("/:id/payment/verify", async (req, res) => {
   }
 });
 
-router.get("/:id/export/:kind", async (req, res) => {
+router.get("/:id/export-link/:kind", async (req, res) => {
   try {
     const project = await loadProjectOr404(req, res);
 
     if (!project) {
       return undefined;
+    }
+
+    const kind = String(req.params.kind || "").trim().toLowerCase();
+
+    if (!["pdf", "docx"].includes(kind)) {
+      return res.status(400).json({ message: "Unsupported export format." });
     }
 
     if (project.payment?.status !== "paid") {
@@ -482,31 +559,31 @@ router.get("/:id/export/:kind", async (req, res) => {
       });
     }
 
-    const kind = String(req.params.kind || "").toLowerCase();
-    const fileBase =
-      project.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "document";
-    const fileName = `${fileBase}.${kind}`;
+    const signed = createSignedExportPayload({
+      projectId: project._id,
+      kind,
+    });
 
-    if (kind === "docx") {
-      const buffer = await createDocxBuffer(project.content);
-      res.setHeader(
-        "Content-Type",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-      );
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-      return res.send(buffer);
+    return res.json({
+      url: `/api/projects/signed-export/${project._id}/${kind}?expiresAt=${signed.expiresAt}&signature=${signed.signature}`,
+      expiresAt: signed.expiresAt,
+      ttlSeconds: getExportUrlTtlSeconds(),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message || "Failed to create export link.",
+    });
+  }
+});
+
+router.get("/:id/export/:kind", async (req, res) => {
+  try {
+    const project = await loadProjectOr404(req, res);
+
+    if (!project) {
+      return undefined;
     }
-
-    if (kind === "pdf") {
-      const buffer = await createPdfBuffer(project.content, {
-        paperSize: project.paperSize || "A4",
-      });
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-      return res.send(buffer);
-    }
-
-    return res.status(400).json({ message: "Unsupported export format." });
+    return sendProjectExport(res, project, req.params.kind);
   } catch (error) {
     return res.status(500).json({
       message: error.message || "Failed to export project.",

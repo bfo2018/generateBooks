@@ -299,11 +299,15 @@ async function api(url, options = {}) {
   return data;
 }
 
-async function downloadFile(url, filename) {
+async function downloadFile(url, filename, options = {}) {
+  const headers = {};
+
+  if (options.auth !== false && state.token) {
+    headers.Authorization = `Bearer ${state.token}`;
+  }
+
   const response = await fetch(buildApiUrl(url), {
-    headers: {
-      Authorization: `Bearer ${state.token}`,
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -1231,9 +1235,11 @@ async function handleDownload(kind) {
   if (!project) return;
 
   try {
+    const link = await api(`/api/projects/${project._id}/export-link/${kind}`);
     await downloadFile(
-      `/api/projects/${project._id}/export/${kind}`,
-      `${project.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "document"}.${kind}`
+      link.url,
+      `${project.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "document"}.${kind}`,
+      { auth: false }
     );
     showToast(`${kind.toUpperCase()} download started.`);
   } catch (error) {

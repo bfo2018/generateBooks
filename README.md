@@ -77,6 +77,7 @@ npm run dev
 - `CORS_ORIGIN` is optional for development. When set, it acts as an allowlist for browser origins. Exact domains and wildcard patterns such as `https://*.ngrok-free.dev` are supported. When empty, the server reflects the requesting origin so cross-origin API calls still work during local/ngrok testing.
 - To verify preflight behavior, run `curl -X OPTIONS '<your-api-url>/api/auth/login' -i -H 'Origin: http://localhost:3000' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type'` and confirm the response includes `Access-Control-Allow-Origin`.
 - Razorpay checkout only needs the public key on the client; signature verification stays on the server with `RAZORPAY_KEY_SECRET`.
+- Export downloads can use short-lived signed URLs so PDF/DOCX buttons work reliably even when the frontend and API are on different domains. Configure `EXPORT_SIGNING_SECRET` in production and adjust `EXPORT_URL_TTL_SECONDS` if you want shorter or longer link lifetimes.
 - The AI integration is intentionally configurable because provider availability and endpoints can change.
 - `mock` mode generates a structured sample draft so the app remains usable before API setup.
 - Pricing is calculated from AI token usage when the provider returns usage stats, or estimated from prompt/output length as a fallback.
