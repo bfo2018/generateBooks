@@ -512,6 +512,7 @@ function updateActionButtons() {
   const hasProject = Boolean(project);
   const loggedIn = hasSessionToken();
 
+  elements.unlockButton.hidden = !hasProject || isPaid;
   elements.unlockButton.disabled = !loggedIn || !hasProject || isPaid;
   elements.downloadDocx.disabled = !loggedIn || !isPaid;
   elements.downloadPdf.disabled = !loggedIn || !isPaid;
@@ -811,6 +812,19 @@ function upsertProject(project) {
   const index = state.projects.findIndex((item) => item._id === project._id);
   if (index === -1) state.projects.unshift(project);
   else state.projects[index] = project;
+}
+
+async function refreshProjectsAfterMutation(projectId) {
+  try {
+    await loadProjects();
+  } catch (error) {
+    renderProjects();
+    updateActionButtons();
+  }
+
+  if (projectId) {
+    selectProject(projectId);
+  }
 }
 
 async function loadHealth() {
@@ -1133,6 +1147,7 @@ async function unlockProject(projectId) {
   if (orderResponse.alreadyPaid) {
     upsertProject(orderResponse.project);
     selectProject(orderResponse.project._id);
+    await refreshProjectsAfterMutation(orderResponse.project._id);
     return;
   }
 
@@ -1143,8 +1158,8 @@ async function unlockProject(projectId) {
     });
 
     upsertProject(verification.project);
-    await loadProjects();
     selectProject(verification.project._id);
+    await refreshProjectsAfterMutation(verification.project._id);
     return;
   }
 
@@ -1170,8 +1185,8 @@ async function unlockProject(projectId) {
           });
 
           upsertProject(verification.project);
-          await loadProjects();
           selectProject(verification.project._id);
+          await refreshProjectsAfterMutation(verification.project._id);
           resolve();
         } catch (error) {
           reject(error);

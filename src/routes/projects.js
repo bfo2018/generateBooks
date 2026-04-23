@@ -55,17 +55,18 @@ function serializeProject(project) {
   }
 
   const paymentStatus = project.payment?.status || "unpaid";
-  const canUnlock = paymentStatus === "paid";
+  const isPaid = paymentStatus === "paid";
   const previewContent = project.pricing?.previewContent || "";
+  const fullContent = project.content || "";
 
   return {
     ...project,
-    content: canUnlock ? project.content : previewContent,
+    content: isPaid ? fullContent : previewContent,
     previewContent,
-    hasLockedContent: !canUnlock && previewContent !== (project.content || ""),
-    canEdit: canUnlock,
-    canDownload: canUnlock,
-    paymentRequired: true,
+    hasLockedContent: !isPaid && previewContent !== fullContent,
+    canEdit: isPaid,
+    canDownload: isPaid,
+    paymentRequired: !isPaid,
     payment: {
       status: paymentStatus,
       orderId: project.payment?.orderId || "",
