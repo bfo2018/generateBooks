@@ -1,6 +1,6 @@
 const fs = require("fs");
 
-const { Document, HeadingLevel, Packer, Paragraph, TextRun } = require("docx");
+const { Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } = require("docx");
 const PDFDocument = require("pdfkit");
 
 const { toStructuredParagraphs } = require("./markdown");
@@ -40,39 +40,118 @@ function getPdfFont(itemType, customFontPath) {
   return "Helvetica";
 }
 
-function paragraphToDocxNode(item) {
-  if (item.type === "title") {
-    return new Paragraph({
-      text: item.text,
-      heading: HeadingLevel.TITLE,
-      spacing: { after: 300 },
+async function downloadImageBuffer(url) {
+  const safeUrl = String(url || "").trim();
+  if (!/^https?:\/\//i.test(safeUrl)) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const response = await fetch(safeUrl, {
+      signal: controller.signal,
+      redirect: "follow",
     });
+    if (!response.ok) {
+      return null;
+    }
+
+    const contentLength = Number(response.headers.get("content-length") || 0);
+    const maxBytes = 8 * 1024 * 1024;
+    if (contentLength > maxBytes) {
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength === 0 || arrayBuffer.byteLength > maxBytes) {
+      return null;
+    }
+
+    return Buffer.from(arrayBuffer);
+  } catch (_error) {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function paragraphToDocxNodes(item) {
+  if (item.type === "title") {
+    return [
+      new Paragraph({
+        text: item.text,
+        heading: HeadingLevel.TITLE,
+        spacing: { after: 300 },
+      }),
+    ];
   }
 
   if (item.type === "heading") {
-    return new Paragraph({
-      text: item.text,
-      heading: HeadingLevel.HEADING_1,
-      spacing: { before: 200, after: 180 },
-    });
+    return [
+      new Paragraph({
+        text: item.text,
+        heading: HeadingLevel.HEADING_1,
+        spacing: { before: 200, after: 180 },
+      }),
+    ];
   }
 
   if (item.type === "subheading") {
-    return new Paragraph({
-      text: item.text,
-      heading: HeadingLevel.HEADING_2,
-      spacing: { before: 120, after: 120 },
-    });
+    return [
+      new Paragraph({
+        text: item.text,
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 120, after: 120 },
+      }),
+    ];
   }
 
-  return new Paragraph({
-    children: [new TextRun(item.text || "")],
-    spacing: { after: 140 },
-  });
+  if (item.type === "image") {
+    const imageBuffer = await downloadImageBuffer(item.src);
+
+    if (!imageBuffer) {
+      return [
+        new Paragraph({
+          children: [new TextRun(`[Image unavailable] ${item.text || "Generated image"}`)],
+          spacing: { before: 120, after: 140 },
+        }),
+      ];
+    }
+
+    return [
+      new Paragraph({
+        children: [
+          new ImageRun({
+            data: imageBuffer,
+            transformation: {
+              width: 560,
+              height: 320,
+            },
+          }),
+        ],
+        spacing: { before: 120, after: 60 },
+      }),
+      new Paragraph({
+        children: [new TextRun(item.text || "Generated image")],
+        spacing: { after: 140 },
+      }),
+    ];
+  }
+
+  return [
+    new Paragraph({
+      children: [new TextRun(item.text || "")],
+      spacing: { after: 140 },
+    }),
+  ];
 }
 
 async function createDocxBuffer(markdown) {
-  const paragraphs = toStructuredParagraphs(markdown).map(paragraphToDocxNode);
+  const items = toStructuredParagraphs(markdown);
+  const paragraphGroups = await Promise.all(items.map((item) => paragraphToDocxNodes(item)));
+  const paragraphs = paragraphGroups.flat();
 
   const document = new Document({
     sections: [{ children: paragraphs }],
@@ -81,7 +160,7 @@ async function createDocxBuffer(markdown) {
   return Packer.toBuffer(document);
 }
 
-function createPdfBuffer(markdown, options = {}) {
+async function createPdfBuffer(markdown, options = {}) {
   const items = toStructuredParagraphs(markdown);
   const pageSize = normalizePdfPageSize(options.paperSize);
   const customFontPath = resolvePdfFont();
@@ -94,37 +173,55 @@ function createPdfBuffer(markdown, options = {}) {
     pdf.on("end", () => resolve(Buffer.concat(chunks)));
     pdf.on("error", reject);
 
-    items.forEach((item) => {
-      if (!item.text) {
+    (async () => {
+      for (const item of items) {
+        if (!item.text) {
+          pdf.moveDown(0.5);
+          continue;
+        }
+
+        if (item.type === "title") {
+          pdf.fontSize(22).font(getPdfFont(item.type, customFontPath)).text(item.text);
+          pdf.moveDown(0.8);
+          continue;
+        }
+
+        if (item.type === "heading") {
+          pdf.fontSize(17).font(getPdfFont(item.type, customFontPath)).text(item.text);
+          pdf.moveDown(0.5);
+          continue;
+        }
+
+        if (item.type === "subheading") {
+          pdf.fontSize(13).font(getPdfFont(item.type, customFontPath)).text(item.text);
+          pdf.moveDown(0.3);
+          continue;
+        }
+
+        if (item.type === "image") {
+          const imageBuffer = await downloadImageBuffer(item.src);
+          if (imageBuffer) {
+            pdf.image(imageBuffer, {
+              fit: [500, 280],
+              align: "center",
+            });
+            pdf.moveDown(0.3);
+          }
+          pdf.fontSize(10).font(getPdfFont("body", customFontPath)).text(item.text || "Generated image");
+          pdf.moveDown(0.6);
+          continue;
+        }
+
+        pdf.fontSize(11).font(getPdfFont(item.type, customFontPath)).text(item.text, {
+          align: "left",
+        });
         pdf.moveDown(0.5);
-        return;
       }
 
-      if (item.type === "title") {
-        pdf.fontSize(22).font(getPdfFont(item.type, customFontPath)).text(item.text);
-        pdf.moveDown(0.8);
-        return;
-      }
-
-      if (item.type === "heading") {
-        pdf.fontSize(17).font(getPdfFont(item.type, customFontPath)).text(item.text);
-        pdf.moveDown(0.5);
-        return;
-      }
-
-      if (item.type === "subheading") {
-        pdf.fontSize(13).font(getPdfFont(item.type, customFontPath)).text(item.text);
-        pdf.moveDown(0.3);
-        return;
-      }
-
-      pdf.fontSize(11).font(getPdfFont(item.type, customFontPath)).text(item.text, {
-        align: "left",
-      });
-      pdf.moveDown(0.5);
+      pdf.end();
+    })().catch((error) => {
+      reject(error);
     });
-
-    pdf.end();
   });
 }
 

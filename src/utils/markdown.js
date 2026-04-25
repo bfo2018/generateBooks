@@ -28,6 +28,14 @@ function toStructuredParagraphs(markdown) {
     .map((line) => line.trimEnd())
     .filter((line, index, lines) => line || lines[index - 1])
     .map((line) => {
+      const markdownImageMatch = line.match(/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)$/i);
+      if (markdownImageMatch) {
+        return {
+          type: "image",
+          text: markdownImageMatch[1] || "Generated image",
+          src: markdownImageMatch[2],
+        };
+      }
       const imagePlaceholderMatch = line.match(/^\[IMAGE:\s*(.+?)\]$/i);
       if (imagePlaceholderMatch) {
         return { type: "image", text: imagePlaceholderMatch[1] };
@@ -119,6 +127,9 @@ function structuredParagraphToMarkdown(item) {
   }
 
   if (item.type === "image") {
+    if (item.src) {
+      return `![${item.text || "Generated image"}](${item.src})`;
+    }
     return `[IMAGE: ${item.text}]`;
   }
 

@@ -422,6 +422,20 @@ textarea:focus {
   margin: 12px 0 18px;
 }
 
+.generated-image-preview {
+  width: 100%;
+  min-height: 170px;
+  max-height: 360px;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 1px solid rgba(92, 67, 44, 0.16);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.generated-image-preview.color {
+  border-color: rgba(180, 88, 54, 0.3);
+}
+
 .generated-image-art {
   min-height: 170px;
   border-radius: 18px;

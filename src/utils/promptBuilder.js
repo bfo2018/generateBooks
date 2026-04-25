@@ -91,21 +91,35 @@ function buildBookPrompt({
 }) {
   const blueprint = getDocumentBlueprint(documentType);
   const normalizedDescription = String(description || "");
+  const safeDocumentType = blueprint.label;
+  const safeLanguage = language === "hindi" ? "Hindi" : "English";
+  const safePaperSize = paperSize || "A4";
   const imageInstruction = includeImages
-    ? `Image Mode is ON. Include 3 to 4 relevant images evenly distributed across the document, not all in one place. For each image, add a clear caption, a short explanation of its relevance, and an image placeholder in this exact format: [IMAGE: description of the image]`
+    ? `Image Mode is ON. Include 3 to 4 relevant images evenly distributed across the document, not all in one place. For each image, include markdown image syntax with a URL in this exact format: ![short descriptive caption](https://example.com/image.jpg). After each image line, add one "Caption:" line and one "Relevance:" line.`
     : "Image Mode is OFF. Do not include image placeholders, figure captions, or image explanations.";
   const colorInstruction =
     colorMode === "color"
       ? "Color Mode is ON. Use visually structured formatting with clear headings, emphasized key terms, section labels, and an engaging academic layout."
       : "Color Mode is OFF. Keep the document clean, text-first, and academically structured without extra visual emphasis.";
-  const safeRequestedPages = Math.max(1, Number(requestedPages) || 10);
+  const safeRequestedPages = Math.max(1, Math.min(200, Number(requestedPages) || 10));
   const pageLimitInstruction = normalizedDescription.match(/\b(?:max(?:imum)?|up to)\s*\d+\s*pages?\b/i)
     ? getPageLimitInstruction(normalizedDescription)
     : `Target about ${safeRequestedPages} pages in the final document.`;
 
   return `
 You are an AI assistant that generates structured academic books and research-style documents.
-Create a structured ${blueprint.label} on the topic "${topic}".
+Create a structured ${safeDocumentType} on the topic "${topic}".
+
+Generation request summary (must be followed):
+- Topic: ${topic}
+- Description: ${normalizedDescription || "No additional description provided."}
+- Format: ${safeDocumentType}
+- Language: ${safeLanguage}
+- Paper size: ${safePaperSize}
+- Color mode: ${colorMode === "color" ? "Color" : "Standard"}
+- Images: ${includeImages ? "Enabled" : "Disabled"}
+- Requested pages: ${safeRequestedPages}
+- Length rule: Keep the final answer aligned to approximately ${safeRequestedPages} pages.
 
 Topic description:
 ${normalizedDescription || "No additional description provided."}
@@ -114,7 +128,7 @@ Language:
 ${getLanguageInstruction(language)}
 
 Layout:
-Use a ${paperSize || "A4"} page layout as the intended output format.
+Use a ${safePaperSize} page layout as the intended output format.
 
 Formatting rules:
 1. Return Markdown only.

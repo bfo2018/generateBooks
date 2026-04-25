@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "docker:restart:ngrok": "bash ./run-docker-ngrok.sh"
   },
   "dependencies": {
     "docx": "^9.0.1",

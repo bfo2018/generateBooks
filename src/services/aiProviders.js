@@ -465,6 +465,16 @@ function ensureImagePlaceholders(content, input) {
   let added = imageLines.length;
   const result = [...lines];
 
+  const buildImageUrl = (description) => {
+    const topic = String(input.topic || "").trim();
+    const seed = encodeURIComponent(
+      `${topic || "book"}-${description || "visual"}-${input.documentType || "document"}`
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+    );
+    return `https://picsum.photos/seed/${seed}/1200/700`;
+  };
+
   for (let index = 0; index < result.length && added < 3; index += 1) {
     if (!result[index].startsWith("## ")) {
       continue;
@@ -474,7 +484,7 @@ function ensureImagePlaceholders(content, input) {
     result.splice(
       index + 1,
       0,
-      `[IMAGE: ${description}]`,
+      `![${description}](${buildImageUrl(description)})`,
       `Caption: ${description}.`,
       "Relevance: This image supports the discussion in this section.",
       ""
@@ -485,7 +495,12 @@ function ensureImagePlaceholders(content, input) {
 
   while (added < 3) {
     const description = fallbackDescriptions[added] || `${input.topic} supporting visual ${added + 1}`;
-    result.push("", `[IMAGE: ${description}]`, `Caption: ${description}.`, "Relevance: This image supports the topic.");
+    result.push(
+      "",
+      `![${description}](${buildImageUrl(description)})`,
+      `Caption: ${description}.`,
+      "Relevance: This image supports the topic."
+    );
     added += 1;
   }
 
@@ -493,7 +508,7 @@ function ensureImagePlaceholders(content, input) {
     const description = fallbackDescriptions[added] || `${input.topic} summary visual`;
     result.push(
       "",
-      `[IMAGE: ${description}]`,
+      `![${description}](${buildImageUrl(description)})`,
       `Caption: ${description}.`,
       "Relevance: This image provides an additional visual summary."
     );

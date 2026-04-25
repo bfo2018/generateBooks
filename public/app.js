@@ -437,17 +437,36 @@ function renderPageItem(item) {
   if (item.type === "heading") return `<h2>${escapeHtml(item.text)}</h2>`;
   if (item.type === "subheading") return `<h3>${escapeHtml(item.text)}</h3>`;
   if (item.type === "image") {
+    const imageSrc = resolvePreviewImageSrc(item);
     return `
       <figure class="generated-image-card">
-        <div class="generated-image-art ${item.variant || "standard"}">
-          <span>${escapeHtml(item.text)}</span>
-        </div>
+        <img
+          class="generated-image-preview ${item.variant || "standard"}"
+          src="${escapeHtml(imageSrc)}"
+          alt="${escapeHtml(item.text || "Generated visual")}"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+        />
         <figcaption>${escapeHtml(item.text)}</figcaption>
       </figure>
     `;
   }
   if (item.type === "bullet") return `<p class="bullet-item">• ${escapeHtml(item.text)}</p>`;
   return `<p>${escapeHtml(item.text)}</p>`;
+}
+
+function createRemoteImageUrl(seedText) {
+  const seed = encodeURIComponent(String(seedText || "book-visual").trim().toLowerCase());
+  return `https://picsum.photos/seed/${seed}/1200/700`;
+}
+
+function resolvePreviewImageSrc(item) {
+  const src = String(item?.src || "").trim();
+  if (/^https?:\/\//i.test(src)) {
+    return src;
+  }
+
+  return createRemoteImageUrl(item?.text || "generated visual");
 }
 
 function hasSessionToken() {
