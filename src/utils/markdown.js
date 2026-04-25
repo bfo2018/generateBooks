@@ -4,24 +4,13 @@ function splitMarkdownLines(markdown) {
 
 function parseMarkdownImageLine(line) {
   const trimmed = String(line || "").trim();
-  if (!trimmed.startsWith("![")) {
+  const imageMatch = trimmed.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+  if (!imageMatch) {
     return null;
   }
 
-  const altClose = trimmed.indexOf("](");
-  if (altClose === -1) {
-    return null;
-  }
-
-  const altText = trimmed.slice(2, altClose);
-  const remainder = trimmed.slice(altClose + 2);
-  const parenClose = remainder.lastIndexOf(")");
-
-  if (parenClose === -1) {
-    return null;
-  }
-
-  const rawTarget = remainder.slice(0, parenClose).trim();
+  const altText = imageMatch[1] || "Generated image";
+  const rawTarget = String(imageMatch[2] || "").trim();
   const urlToken = rawTarget.split(/\s+/)[0] || "";
   const normalizedSrc = urlToken.replace(/^<|>$/g, "");
 
@@ -30,8 +19,10 @@ function parseMarkdownImageLine(line) {
   }
 
   return {
-    altText: altText || "Generated image",
+    altText,
     src: normalizedSrc,
+    startIndex: imageMatch.index || 0,
+    endIndex: (imageMatch.index || 0) + imageMatch[0].length,
   };
 }
 
@@ -60,40 +51,56 @@ function toStructuredParagraphs(markdown) {
   return splitMarkdownLines(markdown)
     .map((line) => line.trimEnd())
     .filter((line, index, lines) => line || lines[index - 1])
-    .map((line) => {
+    .flatMap((line) => {
       const markdownImage = parseMarkdownImageLine(line);
       if (markdownImage) {
-        return {
+        const beforeText = line.slice(0, markdownImage.startIndex).trim();
+        const afterText = line.slice(markdownImage.endIndex).trim();
+        const items = [];
+
+        if (beforeText) {
+          items.push({ type: "body", text: beforeText });
+        }
+
+        items.push({
           type: "image",
           text: markdownImage.altText,
           src: markdownImage.src,
-        };
+        });
+
+        if (afterText) {
+          items.push({ type: "body", text: afterText });
+        }
+
+        return items;
       }
       const htmlImageMatch = line.match(/<img[^>]*src=["']([^"']+)["'][^>]*>/i);
       if (htmlImageMatch) {
-        return {
-          type: "image",
-          text: "Generated image",
-          src: htmlImageMatch[1],
-        };
+        return [
+          {
+            type: "image",
+            text: "Generated image",
+            src: htmlImageMatch[1],
+          },
+        ];
       }
       const imagePlaceholderMatch = line.match(/^\[IMAGE:\s*(.+?)\]$/i);
       if (imagePlaceholderMatch) {
-        return { type: "image", text: imagePlaceholderMatch[1] };
+        return [{ type: "image", text: imagePlaceholderMatch[1] }];
       }
       if (line.startsWith("# ")) {
-        return { type: "title", text: line.replace(/^# /, "") };
+        return [{ type: "title", text: line.replace(/^# /, "") }];
       }
       if (line.startsWith("## ")) {
-        return { type: "heading", text: line.replace(/^## /, "") };
+        return [{ type: "heading", text: line.replace(/^## /, "") }];
       }
       if (line.startsWith("### ")) {
-        return { type: "subheading", text: line.replace(/^### /, "") };
+        return [{ type: "subheading", text: line.replace(/^### /, "") }];
       }
       if (line.startsWith("- ")) {
-        return { type: "bullet", text: line.replace(/^- /, "") };
+        return [{ type: "bullet", text: line.replace(/^- /, "") }];
       }
-      return { type: "body", text: line };
+      return [{ type: "body", text: line }];
     });
 }
 

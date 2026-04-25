@@ -66,6 +66,11 @@ async function downloadImageBuffer(url) {
     const response = await fetch(safeUrl, {
       signal: controller.signal,
       redirect: "follow",
+      headers: {
+        // Some image CDNs reject requests without a browser-like user-agent/accept.
+        "User-Agent": "Mozilla/5.0 (compatible; BookForgeExporter/1.0)",
+        Accept: "image/*,*/*;q=0.8",
+      },
     });
     if (!response.ok) {
       return null;
