@@ -208,11 +208,21 @@ async function createPdfBuffer(markdown, options = {}) {
           const imageSource = item.src || createFallbackImageUrl(item.text);
           const imageBuffer = await downloadImageBuffer(imageSource);
           if (imageBuffer) {
-            pdf.image(imageBuffer, {
-              fit: [500, 280],
+            const maxWidth = 500;
+            const maxHeight = 280;
+            const imageTop = pdf.y;
+            const availableWidth =
+              pdf.page.width - pdf.page.margins.left - pdf.page.margins.right;
+            const imageLeft = pdf.page.margins.left + Math.max(0, (availableWidth - maxWidth) / 2);
+
+            pdf.image(imageBuffer, imageLeft, imageTop, {
+              fit: [maxWidth, maxHeight],
               align: "center",
+              valign: "top",
             });
-            pdf.moveDown(0.3);
+
+            // Force the text cursor below the image block to prevent overlap.
+            pdf.y = imageTop + maxHeight + 10;
           }
           pdf.fontSize(10).font(getPdfFont("body", customFontPath)).text(item.text || "Generated image");
           pdf.moveDown(0.6);
