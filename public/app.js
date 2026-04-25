@@ -1,6 +1,8 @@
 const state = {
-  token: localStorage.getItem("bookforge-token") || "",
-  user: JSON.parse(localStorage.getItem("bookforge-user") || "null"),
+  token: sessionStorage.getItem("bookforge-token") || localStorage.getItem("bookforge-token") || "",
+  user: JSON.parse(
+    sessionStorage.getItem("bookforge-user") || localStorage.getItem("bookforge-user") || "null"
+  ),
   provider: "loading",
   paymentMode: "loading",
   paymentKeyId: "",
@@ -10,6 +12,7 @@ const state = {
   currentView: localStorage.getItem("bookforge-current-view") || "workspace",
   authMode: "login",
   authReady: false,
+  pendingGenerate: false,
   generation: {
     controller: null,
     revealTimer: null,
@@ -86,6 +89,7 @@ const elements = {
   lockAction: document.getElementById("lockAction"),
   historyGenerated: document.getElementById("historyGenerated"),
   historyUnlocked: document.getElementById("historyUnlocked"),
+  historyTotalPaid: document.getElementById("historyTotalPaid"),
   profileName: document.getElementById("profileName"),
   profileMobile: document.getElementById("profileMobile"),
   profileEmail: document.getElementById("profileEmail"),
@@ -268,10 +272,15 @@ async function streamGeneration(payload) {
 }
 
 async function api(url, options = {}) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {}),
-  };
+  const headers = { ...(options.headers || {}) };
+  const hasBody = typeof options.body !== "undefined";
+  const hasContentTypeHeader = Object.keys(headers).some(
+    (key) => key.toLowerCase() === "content-type"
+  );
+
+  if (hasBody && !(options.body instanceof FormData) && !hasContentTypeHeader) {
+    headers["Content-Type"] = "application/json";
+  }
 
   if (state.token && options.auth !== false) {
     headers.Authorization = `Bearer ${state.token}`;
@@ -330,6 +339,8 @@ function clearSession() {
   state.user = null;
   state.projects = [];
   state.selectedProjectId = null;
+  sessionStorage.removeItem(STORAGE_KEYS.token);
+  sessionStorage.removeItem(STORAGE_KEYS.user);
   localStorage.removeItem(STORAGE_KEYS.token);
   localStorage.removeItem(STORAGE_KEYS.user);
   localStorage.removeItem(STORAGE_KEYS.selectedProjectId);
@@ -339,8 +350,11 @@ function clearSession() {
 function saveSession(token, user) {
   state.token = token;
   state.user = user;
-  localStorage.setItem(STORAGE_KEYS.token, token);
-  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user || null));
+  // Keep login for this browser session. User stays logged in until logout or browser close.
+  sessionStorage.setItem(STORAGE_KEYS.token, token);
+  sessionStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user || null));
+  localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem(STORAGE_KEYS.user);
   populateProfile();
 }
 
@@ -566,9 +580,11 @@ function renderProjects() {
 function renderSummary(summary) {
   elements.historyGenerated.textContent = String(summary?.generatedDocuments || 0);
   elements.historyUnlocked.textContent = String(summary?.paidDocuments || 0);
+  elements.historyTotalPaid.textContent = formatMoney(summary?.totalPaidInr || 0);
   if (summary?.profile) {
     state.user = summary.profile;
-    localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(summary.profile));
+    sessionStorage.setItem(STORAGE_KEYS.user, JSON.stringify(summary.profile));
+    localStorage.removeItem(STORAGE_KEYS.user);
     populateProfile();
   }
   elements.trialBadge.textContent = hasSessionToken()
@@ -943,8 +959,14 @@ async function handleLogin(event) {
     }
 
     closeAuthModal();
-    showToast("Login successful. Please click Generate Document to continue.");
+    showToast("Login successful.");
     elements.loginForm.reset();
+    if (state.pendingGenerate) {
+      state.pendingGenerate = false;
+      state.currentView = "workspace";
+      renderShell();
+      setTimeout(() => elements.generatorForm.requestSubmit(), 0);
+    }
   } catch (error) {
     showToast(error.message);
   }
@@ -980,8 +1002,14 @@ async function handleRegister(event) {
     }
 
     closeAuthModal();
-    showToast("Account created successfully. You can now generate the document.");
+    showToast("Account created successfully.");
     elements.registerForm.reset();
+    if (state.pendingGenerate) {
+      state.pendingGenerate = false;
+      state.currentView = "workspace";
+      renderShell();
+      setTimeout(() => elements.generatorForm.requestSubmit(), 0);
+    }
   } catch (error) {
     showToast(error.message);
   }
@@ -1050,6 +1078,8 @@ async function handleGenerate(event) {
   event.preventDefault();
 
   if (!requireLoginForAction("Please login before generating a document.")) {
+    state.pendingGenerate = true;
+    persistDraft();
     return;
   }
 
@@ -1342,6 +1372,7 @@ async function init() {
   try {
     await bootAuthenticatedApp();
   } catch (_error) {
+    clearSession();
     renderShell();
     elements.paymentBadge.textContent = "Pay: unavailable";
   }

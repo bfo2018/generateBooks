@@ -85,11 +85,18 @@ function serializeProject(project) {
 function createProjectSummary(projects = [], user) {
   const generatedDocuments = projects.length;
   const paidDocuments = projects.filter((project) => project.payment?.status === "paid").length;
+  const totalPaidInr = projects.reduce((sum, project) => {
+    if (project.payment?.status !== "paid") {
+      return sum;
+    }
+    return sum + Math.max(0, Number(project.payment?.amountInr || project.pricing?.totalChargeInr) || 0);
+  }, 0);
   const generatedCount = Math.max(0, Number(user?.generatedCount) || 0);
 
   return {
     generatedDocuments,
     paidDocuments,
+    totalPaidInr,
     generatedCount,
     freeGenerationsRemaining: Math.max(0, 2 - generatedCount),
     freeTrialActive:
@@ -177,22 +184,6 @@ router.get("/signed-export/:id/:kind", async (req, res) => {
   }
 });
 
-router.get("/", async (req, res) => {
-  try {
-    const projects = await listProjects(String(req.user._id));
-    const serialized = projects.map(serializeProject);
-
-    res.json({
-      projects: serialized,
-      summary: createProjectSummary(serialized, req.user),
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: error.message || "Failed to load projects.",
-    });
-  }
-});
-
 router.get("/config", async (req, res) => {
   const pricing = getPricingConfig();
   const payment = getPaymentConfig();
@@ -231,6 +222,22 @@ router.get("/config", async (req, res) => {
 });
 
 router.use(requireAuth);
+
+router.get("/", async (req, res) => {
+  try {
+    const projects = await listProjects(String(req.user._id));
+    const serialized = projects.map(serializeProject);
+
+    res.json({
+      projects: serialized,
+      summary: createProjectSummary(serialized, req.user),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message || "Failed to load projects.",
+    });
+  }
+});
 
 router.post("/generate/stream", async (req, res) => {
   const input = normalizeInput(req.body);
