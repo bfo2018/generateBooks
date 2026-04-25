@@ -80,6 +80,10 @@ function estimateParagraphWords(item) {
     return base + 8;
   }
 
+  if (item.type === "image") {
+    return base + 100;
+  }
+
   return base;
 }
 

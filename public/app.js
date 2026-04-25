@@ -320,30 +320,15 @@ async function api(url, options = {}) {
   return data;
 }
 
-async function downloadFile(url, filename, options = {}) {
-  const headers = {};
-
-  if (options.auth !== false && state.token) {
-    headers.Authorization = `Bearer ${state.token}`;
-  }
-
-  const response = await fetch(buildApiUrl(url), {
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: "Download failed." }));
-    throw new Error(error.message || "Download failed.");
-  }
-
-  const blob = await response.blob();
+function triggerDownload(url, filename) {
   const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
+  link.href = buildApiUrl(url);
   link.download = filename;
+  link.rel = "noopener noreferrer";
+  link.target = "_blank";
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(link.href);
 }
 
 function clearSession() {
@@ -453,15 +438,19 @@ function renderPageItem(item) {
     const fallbackSrc = createRemoteImageUrl(item?.text || "generated visual");
     return `
       <figure class="generated-image-card">
-        <img
-          class="generated-image-preview ${item.variant || "standard"}"
-          src="${escapeHtml(imageSrc)}"
-          data-fallback-src="${escapeHtml(fallbackSrc)}"
-          alt="${escapeHtml(item.text || "Generated visual")}"
-          onerror="if(!this.dataset.fallbackApplied){this.dataset.fallbackApplied='1';this.src=this.dataset.fallbackSrc;}"
-          loading="lazy"
-          referrerpolicy="no-referrer"
-        />
+        <div class="generated-image-frame loading">
+          <div class="generated-image-loader" aria-hidden="true"></div>
+          <img
+            class="generated-image-preview ${item.variant || "standard"}"
+            src="${escapeHtml(imageSrc)}"
+            data-fallback-src="${escapeHtml(fallbackSrc)}"
+            alt="${escapeHtml(item.text || "Generated visual")}"
+            onload="this.closest('.generated-image-frame')?.classList.remove('loading')"
+            onerror="if(!this.dataset.fallbackApplied){this.dataset.fallbackApplied='1';this.src=this.dataset.fallbackSrc;return;}this.closest('.generated-image-frame')?.classList.remove('loading');"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+          />
+        </div>
         <figcaption>${escapeHtml(item.text)}</figcaption>
       </figure>
     `;
@@ -1311,10 +1300,9 @@ async function handleDownload(kind) {
 
   try {
     const link = await api(`/api/projects/${project._id}/export-link/${kind}`);
-    await downloadFile(
+    triggerDownload(
       link.url,
-      `${project.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "document"}.${kind}`,
-      { auth: false }
+      `${project.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "document"}.${kind}`
     );
     showToast(`${kind.toUpperCase()} download started.`);
   } catch (error) {

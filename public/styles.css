@@ -422,6 +422,14 @@ textarea:focus {
   margin: 12px 0 18px;
 }
 
+.generated-image-frame {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  min-height: 170px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .generated-image-preview {
   width: 100%;
   min-height: 170px;
@@ -430,6 +438,40 @@ textarea:focus {
   border-radius: 18px;
   border: 1px solid rgba(92, 67, 44, 0.16);
   background: rgba(255, 255, 255, 0.72);
+  transition: opacity 180ms ease;
+}
+
+.generated-image-frame.loading .generated-image-preview {
+  opacity: 0;
+}
+
+.generated-image-loader {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  background:
+    linear-gradient(90deg, rgba(234, 215, 188, 0.45), rgba(255, 250, 244, 0.82), rgba(234, 215, 188, 0.45));
+}
+
+.generated-image-frame.loading .generated-image-loader {
+  display: grid;
+}
+
+.generated-image-loader::after {
+  content: "";
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 3px solid rgba(178, 76, 47, 0.22);
+  border-top-color: rgba(178, 76, 47, 0.9);
+  animation: imageSpin 900ms linear infinite;
+}
+
+@keyframes imageSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .generated-image-preview.color {

@@ -61,8 +61,10 @@ app.use((req, res, next) => {
   const origin = normalizeOriginValue(req.headers.origin || "");
   const allowedOrigins = getAllowedOrigins();
   const originAllowed = isOriginAllowed(origin, allowedOrigins);
+  const allowByDefault = !allowedOrigins.length;
+  const shouldAllowOrigin = Boolean(origin) && (originAllowed || allowByDefault);
 
-  if (originAllowed) {
+  if (shouldAllowOrigin) {
     const requestedHeaders = String(req.headers["access-control-request-headers"] || "").trim();
 
     res.setHeader("Access-Control-Allow-Origin", origin);
@@ -81,10 +83,28 @@ app.use((req, res, next) => {
   }
 
   if (req.method === "OPTIONS") {
-    if (origin && !originAllowed) {
-      return res.status(403).json({
-        message: `CORS blocked for origin ${origin}. Add it to CORS_ORIGIN to allow this frontend.`,
-      });
+    if (origin && !shouldAllowOrigin) {
+      // Default mode is permissive to avoid browser-side CORS failures during deploy.
+      // Strict mode can be enabled explicitly when required.
+      if (String(process.env.CORS_STRICT || "").trim() === "1") {
+        return res.status(403).json({
+          message: `CORS blocked for origin ${origin}. Add it to CORS_ORIGIN to allow this frontend.`,
+        });
+      }
+      const requestedHeaders = String(req.headers["access-control-request-headers"] || "").trim();
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin, Access-Control-Request-Headers");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        requestedHeaders || "Content-Type, Authorization, X-Requested-With, Accept"
+      );
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+      res.setHeader(
+        "Access-Control-Expose-Headers",
+        "Content-Disposition, Content-Length, Content-Type"
+      );
+      res.setHeader("Access-Control-Max-Age", "86400");
     }
 
     return res.sendStatus(204);
