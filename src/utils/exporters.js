@@ -40,6 +40,11 @@ function getPdfFont(itemType, customFontPath) {
   return "Helvetica";
 }
 
+function createFallbackImageUrl(seedText) {
+  const seed = encodeURIComponent(String(seedText || "generated-visual").trim().toLowerCase());
+  return `https://picsum.photos/seed/${seed}/1200/700`;
+}
+
 async function downloadImageBuffer(url) {
   const safeUrl = String(url || "").trim();
   if (!/^https?:\/\//i.test(safeUrl)) {
@@ -109,7 +114,8 @@ async function paragraphToDocxNodes(item) {
   }
 
   if (item.type === "image") {
-    const imageBuffer = await downloadImageBuffer(item.src);
+    const imageSource = item.src || createFallbackImageUrl(item.text);
+    const imageBuffer = await downloadImageBuffer(imageSource);
 
     if (!imageBuffer) {
       return [
@@ -199,7 +205,8 @@ async function createPdfBuffer(markdown, options = {}) {
         }
 
         if (item.type === "image") {
-          const imageBuffer = await downloadImageBuffer(item.src);
+          const imageSource = item.src || createFallbackImageUrl(item.text);
+          const imageBuffer = await downloadImageBuffer(imageSource);
           if (imageBuffer) {
             pdf.image(imageBuffer, {
               fit: [500, 280],

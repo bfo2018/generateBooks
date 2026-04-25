@@ -2,6 +2,38 @@ function splitMarkdownLines(markdown) {
   return markdown.replace(/\r\n/g, "\n").split("\n");
 }
 
+function parseMarkdownImageLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed.startsWith("![")) {
+    return null;
+  }
+
+  const altClose = trimmed.indexOf("](");
+  if (altClose === -1) {
+    return null;
+  }
+
+  const altText = trimmed.slice(2, altClose);
+  const remainder = trimmed.slice(altClose + 2);
+  const parenClose = remainder.lastIndexOf(")");
+
+  if (parenClose === -1) {
+    return null;
+  }
+
+  const rawTarget = remainder.slice(0, parenClose).trim();
+  const urlToken = rawTarget.split(/\s+/)[0] || "";
+
+  if (!/^https?:\/\//i.test(urlToken)) {
+    return null;
+  }
+
+  return {
+    altText: altText || "Generated image",
+    src: urlToken,
+  };
+}
+
 function extractOutline(markdown) {
   const lines = splitMarkdownLines(markdown);
   const startIndex = lines.findIndex((line) => line.trim() === "## Outline");
@@ -28,12 +60,12 @@ function toStructuredParagraphs(markdown) {
     .map((line) => line.trimEnd())
     .filter((line, index, lines) => line || lines[index - 1])
     .map((line) => {
-      const markdownImageMatch = line.match(/^!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)$/i);
-      if (markdownImageMatch) {
+      const markdownImage = parseMarkdownImageLine(line);
+      if (markdownImage) {
         return {
           type: "image",
-          text: markdownImageMatch[1] || "Generated image",
-          src: markdownImageMatch[2],
+          text: markdownImage.altText,
+          src: markdownImage.src,
         };
       }
       const imagePlaceholderMatch = line.match(/^\[IMAGE:\s*(.+?)\]$/i);
