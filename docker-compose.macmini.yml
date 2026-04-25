@@ -1,13 +1,27 @@
 services:
+  mongo:
+    image: mongo:7
+    container_name: bookforge-mongo-macmini
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - bookforge_mongo_data:/data/db
+
   bookforge-app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: bookforge-app-macmini
     restart: unless-stopped
+    depends_on:
+      - mongo
     env_file:
       - .env
     environment:
       PORT: 3000
     ports:
       - "${BOOKFORGE_HOST_PORT:-3010}:3000"
+
+volumes:
+  bookforge_mongo_data:
