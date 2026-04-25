@@ -23,14 +23,15 @@ function parseMarkdownImageLine(line) {
 
   const rawTarget = remainder.slice(0, parenClose).trim();
   const urlToken = rawTarget.split(/\s+/)[0] || "";
+  const normalizedSrc = urlToken.replace(/^<|>$/g, "");
 
-  if (!/^https?:\/\//i.test(urlToken)) {
+  if (!normalizedSrc) {
     return null;
   }
 
   return {
     altText: altText || "Generated image",
-    src: urlToken,
+    src: normalizedSrc,
   };
 }
 
@@ -66,6 +67,14 @@ function toStructuredParagraphs(markdown) {
           type: "image",
           text: markdownImage.altText,
           src: markdownImage.src,
+        };
+      }
+      const htmlImageMatch = line.match(/<img[^>]*src=["']([^"']+)["'][^>]*>/i);
+      if (htmlImageMatch) {
+        return {
+          type: "image",
+          text: "Generated image",
+          src: htmlImageMatch[1],
         };
       }
       const imagePlaceholderMatch = line.match(/^\[IMAGE:\s*(.+?)\]$/i);

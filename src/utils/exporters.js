@@ -45,6 +45,14 @@ function createFallbackImageUrl(seedText) {
   return `https://picsum.photos/seed/${seed}/1200/700`;
 }
 
+function resolveExportImageSource(item) {
+  const src = String(item?.src || "").trim();
+  if (/^https?:\/\//i.test(src)) {
+    return src;
+  }
+  return createFallbackImageUrl(item?.text);
+}
+
 async function downloadImageBuffer(url) {
   const safeUrl = String(url || "").trim();
   if (!/^https?:\/\//i.test(safeUrl)) {
@@ -114,7 +122,7 @@ async function paragraphToDocxNodes(item) {
   }
 
   if (item.type === "image") {
-    const imageSource = item.src || createFallbackImageUrl(item.text);
+    const imageSource = resolveExportImageSource(item);
     const imageBuffer = await downloadImageBuffer(imageSource);
 
     if (!imageBuffer) {
@@ -205,7 +213,7 @@ async function createPdfBuffer(markdown, options = {}) {
         }
 
         if (item.type === "image") {
-          const imageSource = item.src || createFallbackImageUrl(item.text);
+          const imageSource = resolveExportImageSource(item);
           const imageBuffer = await downloadImageBuffer(imageSource);
           if (imageBuffer) {
             const maxWidth = 500;
