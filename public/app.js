@@ -271,6 +271,18 @@ async function streamGeneration(payload) {
   };
 }
 
+async function generateWithoutStream(payload) {
+  const data = await api("/api/projects/generate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  return {
+    project: data.project,
+    user: data.user || null,
+  };
+}
+
 async function api(url, options = {}) {
   const headers = { ...(options.headers || {}) };
   const hasBody = typeof options.body !== "undefined";
@@ -438,12 +450,15 @@ function renderPageItem(item) {
   if (item.type === "subheading") return `<h3>${escapeHtml(item.text)}</h3>`;
   if (item.type === "image") {
     const imageSrc = resolvePreviewImageSrc(item);
+    const fallbackSrc = createRemoteImageUrl(item?.text || "generated visual");
     return `
       <figure class="generated-image-card">
         <img
           class="generated-image-preview ${item.variant || "standard"}"
           src="${escapeHtml(imageSrc)}"
+          data-fallback-src="${escapeHtml(fallbackSrc)}"
           alt="${escapeHtml(item.text || "Generated visual")}"
+          onerror="if(!this.dataset.fallbackApplied){this.dataset.fallbackApplied='1';this.src=this.dataset.fallbackSrc;}"
           loading="lazy"
           referrerpolicy="no-referrer"
         />
@@ -1124,7 +1139,18 @@ async function handleGenerate(event) {
       colorMode: elements.colorMode.value,
     };
 
-    const result = await streamGeneration(payload);
+    let result;
+    try {
+      result = await streamGeneration(payload);
+    } catch (error) {
+      if (error.name === "AbortError") {
+        throw error;
+      }
+
+      // Stream failures can happen on unstable networks/proxies. Fallback to non-stream API.
+      setGenerationStatus("Streaming interrupted. Finishing in safe mode...", true);
+      result = await generateWithoutStream(payload);
+    }
     const project = result.project;
 
     if (result.user) {

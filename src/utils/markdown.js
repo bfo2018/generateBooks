@@ -140,13 +140,41 @@ function structuredParagraphToMarkdown(item) {
   return item.text;
 }
 
+function finalizeLimitedItems(items, wasTrimmed) {
+  const result = [...items];
+
+  // Avoid ending on a dangling heading when page cap trims content.
+  while (result.length && ["title", "heading", "subheading"].includes(result[result.length - 1].type)) {
+    result.pop();
+  }
+
+  if (!result.length) {
+    return items;
+  }
+
+  if (wasTrimmed) {
+    result.push({
+      type: "heading",
+      text: "Closing Note",
+    });
+    result.push({
+      type: "body",
+      text: "This generated draft has been intentionally capped to your requested page count for pricing and export alignment.",
+    });
+  }
+
+  return result;
+}
+
 function limitMarkdownToPageCount(markdown, requestedPages = 10, wordsPerPage = 450) {
   const safePages = Math.max(1, Number(requestedPages) || 10);
   const items = toStructuredParagraphs(markdown);
   const pages = paginateStructuredParagraphs(items, wordsPerPage);
   const limitedItems = pages.slice(0, safePages).flat();
+  const wasTrimmed = pages.length > safePages;
+  const finalizedItems = finalizeLimitedItems(limitedItems, wasTrimmed);
 
-  return limitedItems.map(structuredParagraphToMarkdown).join("\n").trim();
+  return finalizedItems.map(structuredParagraphToMarkdown).join("\n").trim();
 }
 
 function buildPreviewMarkdown(markdown, previewPageLimit = 3, wordsPerPage = 450) {
