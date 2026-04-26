@@ -41,8 +41,12 @@ function getPdfFont(itemType, customFontPath) {
 }
 
 function createFallbackImageUrl(seedText) {
-  const seed = encodeURIComponent(String(seedText || "generated-visual").trim().toLowerCase());
-  return `https://picsum.photos/seed/${seed}/1200/700`;
+  const safeLabel = encodeURIComponent(
+    String(seedText || "Generated visual")
+      .trim()
+      .slice(0, 72) || "Generated visual"
+  );
+  return `https://dummyimage.com/1200x700/f3f4f6/1f2937.png&text=${safeLabel}`;
 }
 
 function resolveExportImageSource(item) {
@@ -76,6 +80,15 @@ async function downloadImageBuffer(url) {
       return null;
     }
 
+    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+    const supportedContentType =
+      contentType.includes("image/jpeg") ||
+      contentType.includes("image/jpg") ||
+      contentType.includes("image/png");
+    if (contentType && !supportedContentType) {
+      return null;
+    }
+
     const contentLength = Number(response.headers.get("content-length") || 0);
     const maxBytes = 8 * 1024 * 1024;
     if (contentLength > maxBytes) {
@@ -93,6 +106,17 @@ async function downloadImageBuffer(url) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function getExportImageBuffer(item) {
+  const primarySource = resolveExportImageSource(item);
+  const primaryBuffer = await downloadImageBuffer(primarySource);
+  if (primaryBuffer) {
+    return primaryBuffer;
+  }
+
+  const fallbackSource = createFallbackImageUrl(item?.text || "Generated image");
+  return downloadImageBuffer(fallbackSource);
 }
 
 async function paragraphToDocxNodes(item) {
@@ -127,8 +151,7 @@ async function paragraphToDocxNodes(item) {
   }
 
   if (item.type === "image") {
-    const imageSource = resolveExportImageSource(item);
-    const imageBuffer = await downloadImageBuffer(imageSource);
+    const imageBuffer = await getExportImageBuffer(item);
 
     if (!imageBuffer) {
       return [
@@ -218,8 +241,7 @@ async function createPdfBuffer(markdown, options = {}) {
         }
 
         if (item.type === "image") {
-          const imageSource = resolveExportImageSource(item);
-          const imageBuffer = await downloadImageBuffer(imageSource);
+          const imageBuffer = await getExportImageBuffer(item);
           if (imageBuffer) {
             const maxWidth = 500;
             const maxHeight = 280;

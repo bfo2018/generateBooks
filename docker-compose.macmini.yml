@@ -4,7 +4,7 @@ services:
     container_name: bookforge-mongo-macmini
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - bookforge_mongo_data:/data/db
 

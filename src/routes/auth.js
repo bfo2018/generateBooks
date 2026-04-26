@@ -1,10 +1,14 @@
 const express = require("express");
 
 const { createUser, findUserByEmail, findUserById, updateUser } = require("../store/userStore");
-const { createSessionToken, hashPassword, sanitizeUser } = require("../utils/auth");
+const {
+  createSessionToken,
+  hashPassword,
+  sanitizeUser,
+  verifySessionToken,
+} = require("../utils/auth");
 
 const router = express.Router();
-const sessions = new Map();
 
 function normalizeCredentials(body = {}) {
   return {
@@ -20,16 +24,15 @@ function normalizeCredentials(body = {}) {
 async function requireAuth(req, res, next) {
   const authHeader = String(req.headers.authorization || "");
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const tokenPayload = verifySessionToken(token);
 
-  if (!token || !sessions.has(token)) {
+  if (!tokenPayload) {
     return res.status(401).json({ message: "Please login to continue." });
   }
 
-  const userId = sessions.get(token);
-  const user = await findUserById(userId);
+  const user = await findUserById(tokenPayload.userId);
 
   if (!user) {
-    sessions.delete(token);
     return res.status(401).json({ message: "Session expired. Please login again." });
   }
 
@@ -58,8 +61,7 @@ router.post("/register", async (req, res) => {
       ...input,
       passwordHash: hashPassword(input.password),
     });
-    const sessionToken = createSessionToken();
-    sessions.set(sessionToken, user._id.toString());
+    const sessionToken = createSessionToken(user._id.toString());
 
     return res.status(201).json({
       token: sessionToken,
@@ -87,8 +89,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
-    const sessionToken = createSessionToken();
-    sessions.set(sessionToken, user._id.toString());
+    const sessionToken = createSessionToken(user._id.toString());
 
     return res.json({
       token: sessionToken,
@@ -102,7 +103,7 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/logout", requireAuth, (req, res) => {
-  sessions.delete(req.authToken);
+  // Stateless token logout is client-side; server simply acknowledges.
   res.json({ success: true });
 });
 

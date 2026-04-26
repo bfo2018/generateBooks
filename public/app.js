@@ -139,6 +139,50 @@ function buildApiUrl(path) {
   return apiBaseUrl ? `${apiBaseUrl}${path}` : path;
 }
 
+function isCrossOriginApiConfigured() {
+  if (!apiBaseUrl || typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    return new URL(apiBaseUrl).origin !== window.location.origin;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function shouldRetryWithSameOrigin(error, response) {
+  if (!isCrossOriginApiConfigured()) {
+    return false;
+  }
+
+  // CORS/network failures surface as fetch TypeError in browsers.
+  if (error) {
+    return error instanceof TypeError;
+  }
+
+  // If custom API base URL points to stale host/path, retry local /api routes.
+  return response?.status === 404 || response?.status === 405;
+}
+
+async function fetchWithApiFallback(path, options = {}) {
+  const primaryUrl = buildApiUrl(path);
+  const canRetrySameOrigin = !/^https?:\/\//i.test(path) && isCrossOriginApiConfigured();
+
+  try {
+    const response = await fetch(primaryUrl, options);
+    if (canRetrySameOrigin && shouldRetryWithSameOrigin(null, response)) {
+      return fetch(path, options);
+    }
+    return response;
+  } catch (error) {
+    if (canRetrySameOrigin && shouldRetryWithSameOrigin(error, null)) {
+      return fetch(path, options);
+    }
+    throw error;
+  }
+}
+
 function setLoader(visible, title, text) {
   elements.loaderOverlay.hidden = !visible;
   if (title) elements.loaderTitle.textContent = title;
@@ -203,7 +247,7 @@ function resetGenerationState() {
 }
 
 async function streamGeneration(payload) {
-  const response = await fetch(buildApiUrl("/api/projects/generate/stream"), {
+  const response = await fetchWithApiFallback("/api/projects/generate/stream", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -298,7 +342,7 @@ async function api(url, options = {}) {
     headers.Authorization = `Bearer ${state.token}`;
   }
 
-  const response = await fetch(buildApiUrl(url), {
+  const response = await fetchWithApiFallback(url, {
     ...options,
     headers,
   });
