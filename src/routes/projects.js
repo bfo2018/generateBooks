@@ -13,6 +13,7 @@ const {
 } = require("../store/projectStore");
 const { incrementUserGeneratedCount } = require("../store/userStore");
 const { createDocxBuffer, createPdfBuffer } = require("../utils/exporters");
+const { serializeExportBlocks } = require("../utils/exportBlocks");
 const {
   createSignedExportPayload,
   getExportUrlTtlSeconds,
@@ -131,7 +132,9 @@ async function sendProjectExport(res, project, kind) {
   const fileName = `${fileBase}.${safeKind}`;
 
   if (safeKind === "docx") {
-    const buffer = await createDocxBuffer(project.content);
+    const buffer = await createDocxBuffer(project.content, {
+      blocks: project.exportBlocks || [],
+    });
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -143,6 +146,7 @@ async function sendProjectExport(res, project, kind) {
   if (safeKind === "pdf") {
     const buffer = await createPdfBuffer(project.content, {
       paperSize: project.paperSize || "A4",
+      blocks: project.exportBlocks || [],
     });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -291,6 +295,7 @@ router.post("/generate/stream", async (req, res) => {
       provider: generated.provider,
       outline,
       content: generated.content,
+      exportBlocks: await serializeExportBlocks(generated.content),
       usage,
       pricing,
       payment: {
@@ -358,6 +363,7 @@ router.post("/generate", async (req, res) => {
       provider: generated.provider,
       outline,
       content: generated.content,
+      exportBlocks: await serializeExportBlocks(generated.content),
       usage,
       pricing,
       payment: {
@@ -422,6 +428,7 @@ router.put("/:id", async (req, res) => {
       includeImages: input.includeImages,
       colorMode: input.colorMode,
       content,
+      exportBlocks: await serializeExportBlocks(content),
       outline: extractOutline(content),
       usage: currentProject.usage || {},
       pricing: {

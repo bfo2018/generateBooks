@@ -60,6 +60,10 @@ const projectSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    exportBlocks: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
     usage: {
       promptTokens: {
         type: Number,

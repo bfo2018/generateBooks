@@ -4,6 +4,7 @@ const { Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } = require
 const PDFDocument = require("pdfkit");
 
 const { toStructuredParagraphs } = require("./markdown");
+const { parseDataImageUrl, resolveImageToBase64 } = require("./imageData");
 
 const PDF_FONT_CANDIDATES = [
   "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
@@ -40,83 +41,19 @@ function getPdfFont(itemType, customFontPath) {
   return "Helvetica";
 }
 
-function createFallbackImageUrl(seedText) {
-  const safeLabel = encodeURIComponent(
-    String(seedText || "Generated visual")
-      .trim()
-      .slice(0, 72) || "Generated visual"
-  );
-  return `https://dummyimage.com/1200x700/f3f4f6/1f2937.png&text=${safeLabel}`;
-}
-
-function resolveExportImageSource(item) {
-  const src = String(item?.src || "").trim();
-  if (/^https?:\/\//i.test(src)) {
-    return src;
-  }
-  return createFallbackImageUrl(item?.text);
-}
-
-async function downloadImageBuffer(url) {
-  const safeUrl = String(url || "").trim();
-  if (!/^https?:\/\//i.test(safeUrl)) {
-    return null;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-
-  try {
-    const response = await fetch(safeUrl, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        // Some image CDNs reject requests without a browser-like user-agent/accept.
-        "User-Agent": "Mozilla/5.0 (compatible; BookForgeExporter/1.0)",
-        Accept: "image/*,*/*;q=0.8",
-      },
-    });
-    if (!response.ok) {
-      return null;
-    }
-
-    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-    const supportedContentType =
-      contentType.includes("image/jpeg") ||
-      contentType.includes("image/jpg") ||
-      contentType.includes("image/png");
-    if (contentType && !supportedContentType) {
-      return null;
-    }
-
-    const contentLength = Number(response.headers.get("content-length") || 0);
-    const maxBytes = 8 * 1024 * 1024;
-    if (contentLength > maxBytes) {
-      return null;
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    if (!arrayBuffer || arrayBuffer.byteLength === 0 || arrayBuffer.byteLength > maxBytes) {
-      return null;
-    }
-
-    return Buffer.from(arrayBuffer);
-  } catch (_error) {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 async function getExportImageBuffer(item) {
-  const primarySource = resolveExportImageSource(item);
-  const primaryBuffer = await downloadImageBuffer(primarySource);
-  if (primaryBuffer) {
-    return primaryBuffer;
-  }
+  const embeddedImage = parseDataImageUrl(item?.imageDataUrl || "");
+  if (embeddedImage?.buffer) return embeddedImage.buffer;
 
-  const fallbackSource = createFallbackImageUrl(item?.text || "Generated image");
-  return downloadImageBuffer(fallbackSource);
+  const inlineSrc = parseDataImageUrl(item?.src || "");
+  if (inlineSrc?.buffer) return inlineSrc.buffer;
+
+  const resolved = await resolveImageToBase64({
+    src: item?.src || "",
+    caption: item?.text || "Generated image",
+    timeoutMs: 10000,
+  });
+  return resolved?.buffer || null;
 }
 
 async function paragraphToDocxNodes(item) {
@@ -190,8 +127,11 @@ async function paragraphToDocxNodes(item) {
   ];
 }
 
-async function createDocxBuffer(markdown) {
-  const items = toStructuredParagraphs(markdown);
+async function createDocxBuffer(markdown, options = {}) {
+  const items =
+    Array.isArray(options.blocks) && options.blocks.length
+      ? options.blocks
+      : toStructuredParagraphs(markdown);
   const paragraphGroups = await Promise.all(items.map((item) => paragraphToDocxNodes(item)));
   const paragraphs = paragraphGroups.flat();
 
@@ -203,7 +143,10 @@ async function createDocxBuffer(markdown) {
 }
 
 async function createPdfBuffer(markdown, options = {}) {
-  const items = toStructuredParagraphs(markdown);
+  const items =
+    Array.isArray(options.blocks) && options.blocks.length
+      ? options.blocks
+      : toStructuredParagraphs(markdown);
   const pageSize = normalizePdfPageSize(options.paperSize);
   const customFontPath = resolvePdfFont();
 
