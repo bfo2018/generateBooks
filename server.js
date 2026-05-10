@@ -45,6 +45,28 @@ function matchAllowedOrigin(origin, allowedOrigin) {
   return new RegExp(`^${escapedPattern}$`, "i").test(normalizedOrigin);
 }
 
+function isNgrokTunnelOrigin(origin) {
+  const value = normalizeOriginValue(origin);
+  if (!/^https:\/\//i.test(value)) {
+    return false;
+  }
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return (
+      host.endsWith(".ngrok-free.dev") ||
+      host.endsWith(".ngrok-free.app") ||
+      host.endsWith(".ngrok.io") ||
+      host.endsWith(".ngrok.app")
+    );
+  } catch (_error) {
+    return false;
+  }
+}
+
+function shouldAllowNgrokTunnelOrigins() {
+  return String(process.env.CORS_ALLOW_NGROK_TUNNELS || "").trim() === "1";
+}
+
 function isOriginAllowed(origin, allowedOrigins) {
   if (!origin) {
     return false;
@@ -54,7 +76,11 @@ function isOriginAllowed(origin, allowedOrigins) {
     return true;
   }
 
-  return allowedOrigins.some((allowedOrigin) => matchAllowedOrigin(origin, allowedOrigin));
+  if (allowedOrigins.some((allowedOrigin) => matchAllowedOrigin(origin, allowedOrigin))) {
+    return true;
+  }
+
+  return shouldAllowNgrokTunnelOrigins() && isNgrokTunnelOrigin(origin);
 }
 
 app.use((req, res, next) => {
@@ -63,8 +89,13 @@ app.use((req, res, next) => {
   const originAllowed = isOriginAllowed(origin, allowedOrigins);
   const allowByDefault = !allowedOrigins.length;
   const shouldAllowOrigin = Boolean(origin) && (originAllowed || allowByDefault);
+  const corsStrict = String(process.env.CORS_STRICT || "").trim() === "1";
 
-  if (shouldAllowOrigin) {
+  // Mirror OPTIONS behavior: when CORS_STRICT is not set, reflect Origin on real requests too.
+  // Previously only preflight got permissive headers, so GET/POST could fail CORS while OPTIONS succeeded.
+  const reflectOrigin = Boolean(origin) && (shouldAllowOrigin || !corsStrict);
+
+  if (reflectOrigin) {
     const requestedHeaders = String(req.headers["access-control-request-headers"] || "").trim();
 
     res.setHeader("Access-Control-Allow-Origin", origin);
@@ -72,7 +103,8 @@ app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      requestedHeaders || "Content-Type, Authorization, X-Requested-With, Accept"
+      requestedHeaders ||
+        "Content-Type, Authorization, X-Requested-With, Accept, Ngrok-Skip-Browser-Warning, ngrok-skip-browser-warning"
     );
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
     res.setHeader(
@@ -83,28 +115,10 @@ app.use((req, res, next) => {
   }
 
   if (req.method === "OPTIONS") {
-    if (origin && !shouldAllowOrigin) {
-      // Default mode is permissive to avoid browser-side CORS failures during deploy.
-      // Strict mode can be enabled explicitly when required.
-      if (String(process.env.CORS_STRICT || "").trim() === "1") {
-        return res.status(403).json({
-          message: `CORS blocked for origin ${origin}. Add it to CORS_ORIGIN to allow this frontend.`,
-        });
-      }
-      const requestedHeaders = String(req.headers["access-control-request-headers"] || "").trim();
-      res.setHeader("Access-Control-Allow-Origin", origin);
-      res.setHeader("Vary", "Origin, Access-Control-Request-Headers");
-      res.setHeader("Access-Control-Allow-Credentials", "true");
-      res.setHeader(
-        "Access-Control-Allow-Headers",
-        requestedHeaders || "Content-Type, Authorization, X-Requested-With, Accept"
-      );
-      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-      res.setHeader(
-        "Access-Control-Expose-Headers",
-        "Content-Disposition, Content-Length, Content-Type"
-      );
-      res.setHeader("Access-Control-Max-Age", "86400");
+    if (origin && !shouldAllowOrigin && corsStrict) {
+      return res.status(403).json({
+        message: `CORS blocked for origin ${origin}. Add it to CORS_ORIGIN to allow this frontend.`,
+      });
     }
 
     return res.sendStatus(204);

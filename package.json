@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "docker:restart:ngrok": "bash ./run-docker-ngrok.sh"
+    "ngrok": "node scripts/run-ngrok.js local",
+    "ngrok:docker": "node scripts/run-ngrok.js docker",
+    "vercel-build": "node scripts/inject-app-config.js",
+    "docker:restart:ngrok": "bash ./run-docker-ngrok.sh",
+    "docker:up": "docker compose -f docker-compose.macmini.yml --project-directory . up --build -d",
+    "docker:up:tunnel": "bash ./run-docker-cloudflare.sh"
   },
   "dependencies": {
     "axios": "^1.15.2",
@@ -15,5 +20,8 @@
     "express": "^4.19.2",
     "mongoose": "^8.6.1",
     "pdfkit": "^0.15.0"
+  },
+  "devDependencies": {
+    "ngrok": "^4.3.3"
   }
 }

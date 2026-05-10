@@ -139,6 +139,43 @@ function buildApiUrl(path) {
   return apiBaseUrl ? `${apiBaseUrl}${path}` : path;
 }
 
+function isNgrokTunnelHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  return (
+    host.endsWith(".ngrok-free.dev") ||
+    host.endsWith(".ngrok-free.app") ||
+    host.endsWith(".ngrok.io") ||
+    host.endsWith(".ngrok.app")
+  );
+}
+
+function isNgrokRequestUrl(url) {
+  try {
+    const resolved = /^https?:\/\//i.test(url)
+      ? new URL(url)
+      : new URL(url, window.location.origin);
+    return isNgrokTunnelHost(resolved.hostname);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function withNgrokFetchOptions(url, options = {}) {
+  if (!isNgrokRequestUrl(url)) {
+    return options;
+  }
+  const merged = { ...options };
+  const headers = new Headers(options.headers || {});
+  if (
+    !headers.has("ngrok-skip-browser-warning") &&
+    !headers.has("Ngrok-Skip-Browser-Warning")
+  ) {
+    headers.set("ngrok-skip-browser-warning", "true");
+  }
+  merged.headers = headers;
+  return merged;
+}
+
 function isCrossOriginApiConfigured() {
   if (!apiBaseUrl || typeof window === "undefined") {
     return false;
@@ -168,16 +205,18 @@ function shouldRetryWithSameOrigin(error, response) {
 async function fetchWithApiFallback(path, options = {}) {
   const primaryUrl = buildApiUrl(path);
   const canRetrySameOrigin = !/^https?:\/\//i.test(path) && isCrossOriginApiConfigured();
+  const primaryOpts = withNgrokFetchOptions(primaryUrl, options);
+  const sameOriginOpts = withNgrokFetchOptions(path, options);
 
   try {
-    const response = await fetch(primaryUrl, options);
+    const response = await fetch(primaryUrl, primaryOpts);
     if (canRetrySameOrigin && shouldRetryWithSameOrigin(null, response)) {
-      return fetch(path, options);
+      return fetch(path, sameOriginOpts);
     }
     return response;
   } catch (error) {
     if (canRetrySameOrigin && shouldRetryWithSameOrigin(error, null)) {
-      return fetch(path, options);
+      return fetch(path, sameOriginOpts);
     }
     throw error;
   }
