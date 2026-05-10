@@ -8,6 +8,24 @@ function normalizeSourceUrl(url) {
   return "";
 }
 
+function buildNgrokSkipHeaders(url) {
+  const safe = normalizeSourceUrl(url);
+  if (!safe) {
+    return {};
+  }
+  try {
+    const host = new URL(safe).hostname.toLowerCase();
+    const isNgrok =
+      host.endsWith(".ngrok-free.dev") ||
+      host.endsWith(".ngrok-free.app") ||
+      host.endsWith(".ngrok.io") ||
+      host.endsWith(".ngrok.app");
+    return isNgrok ? { "ngrok-skip-browser-warning": "true" } : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
 function createDeterministicImageUrl(seedText) {
   const seed = encodeURIComponent(
     String(seedText || "generated-visual")
@@ -77,6 +95,7 @@ async function imageUrlToBase64(url, timeoutMs = 10000) {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; BookForgeExporter/1.0)",
         Accept: "image/*,*/*;q=0.8",
+        ...buildNgrokSkipHeaders(safeUrl),
       },
     });
 

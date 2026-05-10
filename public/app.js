@@ -403,15 +403,62 @@ async function api(url, options = {}) {
   return data;
 }
 
-function triggerDownload(url, filename) {
+async function triggerDownload(url, filename) {
+  const fullUrl = buildApiUrl(url);
+  const response = await fetch(fullUrl, withNgrokFetchOptions(fullUrl, { method: "GET" }));
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+
+  if (!response.ok) {
+    let message = `Download failed (${response.status}).`;
+    if (contentType.includes("application/json")) {
+      try {
+        const payload = await response.json();
+        if (payload && payload.message) {
+          message = payload.message;
+        }
+      } catch (_error) {
+        /* ignore */
+      }
+    } else {
+      try {
+        await response.text();
+      } catch (_error) {
+        /* ignore */
+      }
+    }
+    throw new Error(message);
+  }
+
+  const ext = String(filename.split(".").pop() || "").toLowerCase();
+  if (
+    ext === "pdf" &&
+    (contentType.includes("text/html") || contentType.includes("text/plain"))
+  ) {
+    throw new Error(
+      "Received a web page instead of a PDF. If you use ngrok free, avoid opening the export in a new tab; this app now fetches the file with the ngrok skip header — try the download again."
+    );
+  }
+
+  if (
+    ext === "docx" &&
+    contentType.includes("text/html") &&
+    !contentType.includes("wordprocessing")
+  ) {
+    throw new Error(
+      "Received a web page instead of a Word file. Try the download again, or confirm the API URL is correct."
+    );
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = buildApiUrl(url);
+  link.href = objectUrl;
   link.download = filename;
   link.rel = "noopener noreferrer";
-  link.target = "_blank";
   document.body.append(link);
   link.click();
   link.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 120000);
 }
 
 function clearSession() {
@@ -1383,7 +1430,7 @@ async function handleDownload(kind) {
 
   try {
     const link = await api(`/api/projects/${project._id}/export-link/${kind}`);
-    triggerDownload(
+    await triggerDownload(
       link.url,
       `${project.topic.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "document"}.${kind}`
     );
